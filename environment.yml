@@ -2,7 +2,6 @@ name: dapperFLAudio
 channels:
   - conda-forge
   - pytorch
-  - anaconda
   - defaults
 dependencies:
   - python=3.11.11
@@ -10,7 +9,7 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  # - cudatoolkit=10.1
+  - cudatoolkit=11.8
   - mpi4py
   - scikit-learn
   - numpy
