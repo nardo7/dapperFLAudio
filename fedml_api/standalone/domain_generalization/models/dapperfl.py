@@ -79,6 +79,7 @@ class DapperFL(FederatedModel):
                     )
                     # remove pruning
                     torch_prune.remove(module, "weight")
+            # self.nets_list[net_id] = net
 
         super().aggregate_nets(freq)
 
