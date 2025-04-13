@@ -1,3 +1,4 @@
+import patch
 import os
 import sys
 import socket
@@ -126,6 +127,9 @@ def parse_args():
     )
     parser.add_argument(
         "--online_ratio", type=float, default=1, help="The Ratio for Online Clients"
+    )
+    parser.add_argument(
+        "--infoNCET", type=float, default=0.02, help="The InfoNCE temperature"
     )
 
     torch.set_num_threads(8)
