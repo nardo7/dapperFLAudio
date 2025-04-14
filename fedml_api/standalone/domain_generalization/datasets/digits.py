@@ -140,7 +140,7 @@ class FedLeaDigits(FederatedDataset):
     NAME = "fl_digits"
     SETTING = "domain_skew"
     DOMAINS_LIST = ["mnist", "usps", "svhn", "syn"]
-    percent_dict = {"mnist": 0.015, "usps": 0.015, "svhn": 0.015, "syn": 0.015}
+    percent_dict = {"mnist": 0.01, "usps": 0.01, "svhn": 0.01, "syn": 0.01}
 
     N_SAMPLES_PER_Class = None
     N_CLASS = 10
