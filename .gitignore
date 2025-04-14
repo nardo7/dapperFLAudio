@@ -2,3 +2,4 @@
 data/
 wandb/
 infrastructure/.terraform/
+**/__pycache__/

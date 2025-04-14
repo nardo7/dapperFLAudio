@@ -1,9 +1,5 @@
-import patch
 import os
 import sys
-import socket
-import time
-import uuid
 import datetime
 import setproctitle
 import torch

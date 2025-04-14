@@ -107,55 +107,64 @@ class FPL(FederatedModel):
 
         # mean_f_pos = np.array(mean_f)[all_global_protos_keys == label.item()][0].to(self.device)
         # mean_f_pos = mean_f_pos.view(1, -1)
-        # # mean_f_neg = torch.cat(list(np.array(mean_f)[all_global_protos_keys != label.item()]), dim=0).to(self.device)
-        # # mean_f_neg = mean_f_neg.view(9, -1)
 
-        # loss_mse = nn.MSELoss()
-        # cu_info_loss = loss_mse(f_now, mean_f_pos)
+        # mean_f_neg = torch.cat(list(np.array(mean_f)[all_global_protos_keys != label.item()]), dim=0).to(self.device)
+        # mean_f_neg = mean_f_neg.view(9, -1)
 
-        # hierar_info_loss = xi_info_loss + cu_info_loss
-        # return hierar_info_loss
-        # Convert label.item() to an integer
-        label_value = label.item()
-
-        # Find the indices where all_global_protos_keys equals label_value
-        matching_indices = [
-            i for i, key in enumerate(all_global_protos_keys) if key == label_value
-        ]
-
-        if not matching_indices:
-            # Handle case where no matching key is found
-            # You might want to return a zero loss or handle differently
-            return torch.tensor(0.0, requires_grad=True, device=self.device)
-
-        # Get the first matching tensor and send to device
-        f_pos = all_f[matching_indices[0]].to(self.device)
-
-        # Get all non-matching tensors
-        non_matching_indices = [
-            i for i, key in enumerate(all_global_protos_keys) if key != label_value
-        ]
-        f_neg_list = [all_f[i].to(self.device) for i in non_matching_indices]
-
-        # Concatenate if there are elements in f_neg_list
-        if f_neg_list:
-            f_neg = torch.cat(f_neg_list)
-        else:
-            # Handle the case where there are no negatives
-            f_neg = torch.empty(0, f_pos.size(1)).to(self.device)
-
-        # Calculate InfoNCE loss
+        f_idx = np.where(all_global_protos_keys == label.item())[0][0]
+        f_pos = all_f[f_idx].to(self.device)
+        f_neg = torch.cat([f for i, f in enumerate(all_f) if i != f_idx]).to(
+            self.device
+        )
         xi_info_loss = self.calculate_infonce(f_now, f_pos, f_neg)
+        mean_f_pos = mean_f[f_idx].to(self.device)
 
-        # Get the matching mean feature
-        mean_f_pos = mean_f[matching_indices[0]].to(self.device)
-        mean_f_pos = mean_f_pos.view(1, -1)
-
-        # Calculate MSE loss
         loss_mse = nn.MSELoss()
         cu_info_loss = loss_mse(f_now, mean_f_pos)
 
         hierar_info_loss = xi_info_loss + cu_info_loss
+        return hierar_info_loss
+        # Convert label.item() to an integer
+        # label_value = label.item()
+
+        # # Find the indices where all_global_protos_keys equals label_value
+        # matching_indices = [
+        #     i for i, key in enumerate(all_global_protos_keys) if key == label_value
+        # ]
+
+        # if not matching_indices:
+        #     # Handle case where no matching key is found
+        #     # You might want to return a zero loss or handle differently
+        #     return torch.tensor(0.0, requires_grad=True, device=self.device)
+
+        # # Get the first matching tensor and send to device
+        # f_pos = all_f[matching_indices[0]].to(self.device)
+
+        # # Get all non-matching tensors
+        # non_matching_indices = [
+        #     i for i, key in enumerate(all_global_protos_keys) if key != label_value
+        # ]
+        # f_neg_list = [all_f[i].to(self.device) for i in non_matching_indices]
+
+        # # Concatenate if there are elements in f_neg_list
+        # if f_neg_list:
+        #     f_neg = torch.cat(f_neg_list)
+        # else:
+        #     # Handle the case where there are no negatives
+        #     f_neg = torch.empty(0, f_pos.size(1)).to(self.device)
+
+        # # Calculate InfoNCE loss
+        # xi_info_loss = self.calculate_infonce(f_now, f_pos, f_neg)
+
+        # # Get the matching mean feature
+        # mean_f_pos = mean_f[matching_indices[0]].to(self.device)
+        # mean_f_pos = mean_f_pos.view(1, -1)
+
+        # # Calculate MSE loss
+        # loss_mse = nn.MSELoss()
+        # cu_info_loss = loss_mse(f_now, mean_f_pos)
+
+        # hierar_info_loss = xi_info_loss + cu_info_loss
         return hierar_info_loss
 
     def calculate_infonce(self, f_now, f_pos, f_neg):
