@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="fl_officecaltech",  # fl_officecaltech fl_digits
+        default="fl_digits",  # fl_officecaltech fl_digits
         choices=DATASET_NAMES,
         help="Datasets used in the experiment.",
     )
@@ -74,7 +74,7 @@ def parse_args():
         "--pr_strategy", type=str, default="AD", help="Model pruning strategy."
     )
     parser.add_argument(
-        "-bb", "--backbone", type=str, default="res18", help="Backbone global model."
+        "-bb", "--backbone", type=str, default="res10", help="Backbone global model."
     )
     parser.add_argument(
         "-a", "--alpha", type=float, default=0.9, help="Coefficient alpha in co-pruning"

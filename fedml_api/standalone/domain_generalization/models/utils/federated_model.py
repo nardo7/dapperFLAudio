@@ -32,7 +32,7 @@ class FederatedModel(nn.Module):
         self.transform = transform
 
         # For Online
-        self.random_state = np.random.RandomState()
+        self.random_state = np.random.RandomState(args.seed)
         self.online_num = np.ceil(self.args.parti_num * self.args.online_ratio).item()
         self.online_num = int(self.online_num)
 
@@ -92,7 +92,6 @@ class FederatedModel(nn.Module):
 
         online_clients = self.online_clients
         global_w = self.global_net.state_dict()
-        # global_w_prev = copy.deepcopy(global_w)
 
         if self.args.averaing == "weight":
             online_clients_dl = [
@@ -110,19 +109,6 @@ class FederatedModel(nn.Module):
         first = True
         for index, net_id in enumerate(online_clients):
             net = nets_list[net_id]
-
-            # # recovery weights
-            # if self.args.model == "dapperfl" and self.pr_strategy != "0":
-            #     for name, module in net.named_modules():
-            #         if isinstance(
-            #             module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
-            #         ) and torch_prune.is_pruned(module):
-            #             mask = list(module.named_buffers())[0][1]
-            #             module.weight += global_w_prev[name + ".weight"] - (
-            #                 global_w_prev[name + ".weight"] * mask
-            #             )
-            #             # remove pruning
-            #             torch_prune.remove(module, "weight")
 
             net_para = net.state_dict()
 

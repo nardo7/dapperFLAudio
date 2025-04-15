@@ -79,7 +79,6 @@ class DapperFL(FederatedModel):
                     )
                     # remove pruning
                     torch_prune.remove(module, "weight")
-            # self.nets_list[net_id] = net
 
         super().aggregate_nets(freq)
 
@@ -100,7 +99,6 @@ class DapperFL(FederatedModel):
             for batch_idx, (images, labels) in enumerate(train_loader):
                 images = images.to(self.device)
                 labels = labels.to(self.device)
-
                 features = net.features(images)
                 outputs = net.classifier(features)
 
@@ -117,6 +115,7 @@ class DapperFL(FederatedModel):
                 optimizer.step()
 
             if i == 0:
+                # print("labels: ", labels)
                 # Co-Pruning
                 if self.pr_strategy != "0":
                     # calculate co-weights
