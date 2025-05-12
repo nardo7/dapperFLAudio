@@ -13,14 +13,16 @@ def conv3x3(in_planes: int, out_planes: int, stride: int = 1) -> F.conv2d:
     :param stride: stride of the convolution
     :return: convolutional layer
     """
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+    return nn.Conv2d(
+        in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False
+    )
 
 
 class BasicBlock(nn.Module):
     """
     The basic block of ResNet.
     """
+
     expansion = 1
 
     def __init__(self, in_planes: int, planes: int, stride: int = 1) -> None:
@@ -38,9 +40,14 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1,
-                          stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion * planes)
+                nn.Conv2d(
+                    in_planes,
+                    self.expansion * planes,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(self.expansion * planes),
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -61,8 +68,14 @@ class ResNet(nn.Module):
     ResNet network architecture. Designed for complex datasets.
     """
 
-    def __init__(self, block: BasicBlock, num_blocks: List[int],
-                 num_classes: int, nf: int, name:str) -> None:
+    def __init__(
+        self,
+        block: BasicBlock,
+        num_blocks: List[int],
+        num_classes: int,
+        nf: int,
+        name: str,
+    ) -> None:
         """
         Instantiates the layers of the network.
         :param block: the basic ResNet block
@@ -84,23 +97,26 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, nf * 8, num_blocks[3], stride=2)
         self.linear = nn.Linear(nf * 8 * block.expansion, num_classes)
 
-        self._features = nn.Sequential(self.conv1,
-                                       self.bn1,
-                                       nn.ReLU(),
-                                       self.layer1,
-                                       self.layer2,
-                                       self.layer3,
-                                       self.layer4)
+        self._features = nn.Sequential(
+            self.conv1,
+            self.bn1,
+            nn.ReLU(),
+            self.layer1,
+            self.layer2,
+            self.layer3,
+            self.layer4,
+        )
         self.cls = self.linear
 
         self.encoder = nn.Sequential(
             nn.Linear(nf * 8 * block.expansion, nf * 8 * block.expansion),
             nn.ReLU(inplace=True),
-            nn.Linear(nf * 8 * block.expansion, 512)
+            nn.Linear(nf * 8 * block.expansion, 512),
         )
 
-    def _make_layer(self, block: BasicBlock, planes: int,
-                    num_blocks: int, stride: int) -> nn.Module:
+    def _make_layer(
+        self, block: BasicBlock, planes: int, num_blocks: int, stride: int
+    ) -> nn.Module:
         """
         Instantiates a ResNet layer.
         :param block: ResNet basic block
@@ -134,8 +150,8 @@ class ResNet(nn.Module):
         return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = relu(self.bn1(self.conv1(x)))  # 64, 32, 32
-        if hasattr(self, 'maxpool'):
+        out: torch.Tensor = relu(self.bn1(self.conv1(x)))  # 64, 32, 32
+        if hasattr(self, "maxpool"):
             out = self.maxpool(out)
         out = self.layer1(out)  # -> 64, 32, 32
         out = self.layer2(out)  # -> 128, 16, 16
@@ -144,8 +160,7 @@ class ResNet(nn.Module):
         out = avg_pool2d(out, out.shape[2])  # -> 512, 1, 1
         feature = out.view(out.size(0), -1)  # 512
         out = self.cls(feature)
-        return  out
-
+        return out
 
 
 def resnet10(nclasses: int, nf: int = 64) -> ResNet:
@@ -155,8 +170,7 @@ def resnet10(nclasses: int, nf: int = 64) -> ResNet:
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [1, 1, 1, 1], nclasses, nf,'res10')
-
+    return ResNet(BasicBlock, [1, 1, 1, 1], nclasses, nf, "res10")
 
 
 def resnet12(nclasses: int, nf: int = 64) -> ResNet:
@@ -166,7 +180,8 @@ def resnet12(nclasses: int, nf: int = 64) -> ResNet:
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [2, 1, 1, 1], nclasses, nf,'res12')
+    return ResNet(BasicBlock, [2, 1, 1, 1], nclasses, nf, "res12")
+
 
 def resnet18(nclasses: int, nf: int = 64) -> ResNet:
     """
@@ -175,7 +190,8 @@ def resnet18(nclasses: int, nf: int = 64) -> ResNet:
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [2, 2, 2, 2], nclasses, nf,'res18')
+    return ResNet(BasicBlock, [2, 2, 2, 2], nclasses, nf, "res18")
+
 
 def resnet20(nclasses: int, nf: int = 64) -> ResNet:
     """
@@ -184,7 +200,8 @@ def resnet20(nclasses: int, nf: int = 64) -> ResNet:
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [1, 3, 3, 3], nclasses, nf,'res20')
+    return ResNet(BasicBlock, [1, 3, 3, 3], nclasses, nf, "res20")
+
 
 def resnet34(nclasses: int, nf: int = 64) -> ResNet:
     """
@@ -193,4 +210,4 @@ def resnet34(nclasses: int, nf: int = 64) -> ResNet:
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [3, 4, 6, 3], nclasses, nf,'res34')
+    return ResNet(BasicBlock, [3, 4, 6, 3], nclasses, nf, "res34")
