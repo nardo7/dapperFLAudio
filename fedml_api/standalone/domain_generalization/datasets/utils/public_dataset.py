@@ -64,8 +64,7 @@ class PublicDataset:
         pass
 
 
-def random_loaders(train_dataset: datasets,
-                   setting: PublicDataset) -> DataLoader:
+def random_loaders(train_dataset: datasets, setting: PublicDataset) -> DataLoader:
     public_scale = setting.args.public_len
     y_train = train_dataset.targets
     n_train = len(y_train)
@@ -73,7 +72,41 @@ def random_loaders(train_dataset: datasets,
     if public_scale != None:
         idxs = idxs[0:public_scale]
     train_sampler = SubsetRandomSampler(idxs)
-    train_loader = DataLoader(train_dataset, batch_size=setting.args.public_batch_size, sampler=train_sampler, num_workers=4)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=setting.args.public_batch_size,
+        sampler=train_sampler,
+        num_workers=4,
+    )
     setting.train_loader = train_loader
 
     return setting.train_loader
+
+
+class PadSequence:
+    def __init__(self, max_len: int):
+        self.max_len = max_len
+
+    def __call__(self, audio: torch.Tensor) -> torch.Tensor:
+        """
+        Pads the input tensor to the specified maximum length.
+        :param batch: The input tensor to be padded.
+        :return: The padded tensor.
+        """
+        return pad_sequence(audio, self.max_len)
+
+
+def pad_sequence(audio: torch.Tensor, max_len: int) -> torch.Tensor:
+    """
+    Pads the input tensor to the specified maximum length.
+    :param audio: The input tensor to be padded.
+    :param max_len: The maximum length to pad to.
+    :return: The padded tensor.
+    """
+    if audio.size(-1) < max_len:
+        padding = torch.zeros(1, max_len - audio.size(1))
+        # print(padding.shape)
+        # print(audio.shape)
+        audio = torch.cat((audio, padding), dim=1)
+        # print(audio.shape)
+    return audio
