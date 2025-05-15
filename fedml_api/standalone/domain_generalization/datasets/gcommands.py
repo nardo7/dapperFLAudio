@@ -226,7 +226,7 @@ class FederatedGCommandsDataset(FederatedDataset):
                 )
 
                 dataset.set_label_transform(FromLabelsToIdx(dataset.classes))
-                # dataset._preload_data()
+                dataset._preload_data()
                 train_ds_list.append(dataset)
 
         for domain in self.DOMAINS_LIST:
