@@ -115,6 +115,11 @@ class ResNet(nn.Module):
             nn.Linear(nf * 8 * block.expansion, 512),
         )
 
+    def len(self):
+        total_params = sum(p.numel() for p in self.parameters())
+        print(f"Total parameters: {total_params}")
+        return total_params
+
     def _make_layer(
         self, block: BasicBlock, planes: int, num_blocks: int, stride: int
     ) -> nn.Module:
