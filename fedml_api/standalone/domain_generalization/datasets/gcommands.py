@@ -226,7 +226,8 @@ class FederatedGCommandsDataset(FederatedDataset):
                 )
 
                 dataset.set_label_transform(FromLabelsToIdx(dataset.classes))
-                dataset._preload_data()
+                if not torch.cuda.is_available():
+                    dataset._preload_data()
                 train_ds_list.append(dataset)
 
         for domain in self.DOMAINS_LIST:
@@ -261,7 +262,7 @@ class FederatedGCommandsDataset(FederatedDataset):
         # Partition the dataset into train and test loaders
         train_loaders = []
         test_loaders = []
-
+        num_workers = 4 if torch.cuda.is_available() else None
         for train_ds in train_ds_list:
             idxs = np.random.choice(
                 np.arange(len(train_ds)),
@@ -273,13 +274,13 @@ class FederatedGCommandsDataset(FederatedDataset):
                 train_ds,
                 batch_size=self.args.local_batch_size,
                 sampler=train_sampler,
-                num_workers=4,
+                num_workers=num_workers,
             )
             train_loaders.append(train_loader)
 
         for test_ds in test_ds_list:
             test_loader = DataLoader(
-                test_ds, batch_size=self.args.local_batch_size, num_workers=4
+                test_ds, batch_size=self.args.local_batch_size, num_workers=num_workers
             )
             test_loaders.append(test_loader)
 
