@@ -1,6 +1,8 @@
 torch
 torchvision
 torchaudio
+sox
+soundfile
 FedML==0.8.3
 
 

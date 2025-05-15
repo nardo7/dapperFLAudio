@@ -75,6 +75,7 @@ class ResNet(nn.Module):
         num_classes: int,
         nf: int,
         name: str,
+        input_channels: int = 3,
     ) -> None:
         """
         Instantiates the layers of the network.
@@ -89,7 +90,7 @@ class ResNet(nn.Module):
         self.block = block
         self.num_classes = num_classes
         self.nf = nf
-        self.conv1 = conv3x3(3, nf * 1)
+        self.conv1 = conv3x3(input_channels, nf * 1)
         self.bn1 = nn.BatchNorm2d(nf * 1)
         self.layer1 = self._make_layer(block, nf * 1, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, nf * 2, num_blocks[1], stride=2)
@@ -163,14 +164,14 @@ class ResNet(nn.Module):
         return out
 
 
-def resnet10(nclasses: int, nf: int = 64) -> ResNet:
+def resnet10(nclasses: int, nf: int = 64, input_channels: int = 3) -> ResNet:
     """
     Instantiates a ResNet18 network.
     :param nclasses: number of output classes
     :param nf: number of filters
     :return: ResNet network
     """
-    return ResNet(BasicBlock, [1, 1, 1, 1], nclasses, nf, "res10")
+    return ResNet(BasicBlock, [1, 1, 1, 1], nclasses, nf, "res10", input_channels)
 
 
 def resnet12(nclasses: int, nf: int = 64) -> ResNet:
