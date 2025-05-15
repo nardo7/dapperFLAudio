@@ -112,7 +112,7 @@ class GCommandsDataset(SPEECHCOMMANDS):
         if self.data is not None:
             return (
                 self.data[index].to(torch.float32),
-                self.targets[index].to(torch.int16),
+                self.targets[index].to(torch.int32),
             )
 
         waveform, sample_rate, label, speaker_id, utterance_number = (
