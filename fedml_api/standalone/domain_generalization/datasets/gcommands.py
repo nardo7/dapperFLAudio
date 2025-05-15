@@ -273,7 +273,7 @@ class FederatedGCommandsDataset(FederatedDataset):
                 train_ds,
                 batch_size=self.args.local_batch_size,
                 sampler=train_sampler,
-                # num_workers=4,
+                num_workers=4,
             )
             train_loaders.append(train_loader)
 
