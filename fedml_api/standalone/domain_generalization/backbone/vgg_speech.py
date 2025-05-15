@@ -5,11 +5,12 @@ import torch.nn.functional as F
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name, input_channels: int = 1, num_classes=36):
+    def __init__(self, name, input_channels: int = 1, num_classes=36):
         super(VGG, self).__init__()
-        self.features = make_layers(cfg[vgg_name], True, input_channels)
+        self.name = name
+        self.features = make_layers(cfg[name], True, input_channels)
         self.classifier = nn.Sequential(
-            nn.Linear(1 * 3 * 512, 4096),
+            nn.Linear(1 * 4 * 512, 4096),
             nn.ReLU(True),
             nn.Dropout(),
             nn.Linear(4096, 4096),
@@ -19,8 +20,12 @@ class VGG(nn.Module):
         )
         self._initialize_weights()
 
+    def len(self):
+        total_params = sum(p.numel() for p in self.parameters())
+        print(f"Total parameters: {total_params}")
+        return total_params
+
     def forward(self, x):
-        x.unsqueeze_(1)
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
