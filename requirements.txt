@@ -3,7 +3,7 @@ torchvision
 torchaudio
 sox
 soundfile
-FedML==0.8.3
+# FedML==0.8.3
 
 
 # h5py==3.6.0
