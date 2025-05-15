@@ -2,7 +2,7 @@ best_args = {
     "gcommands": {
         "fedavg": {
             "local_lr": 0.01,
-            "local_batch_size": 32,
+            "local_batch_size": 16,
         }
     },
     "fl_digits": {
