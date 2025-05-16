@@ -115,6 +115,14 @@ def train(
                     p=None,
                 )
                 selected_domain_list = list(selected_domain_list) + domains_list
+            elif model.args.dataset == "fl_ser":
+                selected_domain_list = np.random.choice(
+                    domains_list,
+                    size=args.parti_num - domains_len,
+                    replace=True,
+                    p=None,
+                )
+                selected_domain_list = list(selected_domain_list) + domains_list
 
             result = dict(Counter(selected_domain_list))
 
