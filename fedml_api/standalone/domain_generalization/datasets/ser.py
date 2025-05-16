@@ -1,0 +1,352 @@
+import numpy as np
+import torch
+import torch.utils.data as data
+import torchaudio
+import torchaudio.transforms as audio_transforms
+import torchvision.transforms as transforms
+from PIL import Image
+from torch.utils.data import DataLoader, SubsetRandomSampler
+from typing import Tuple, Union, List
+
+from fedml_api.standalone.domain_generalization.utils.conf import data_path
+from fedml_api.standalone.domain_generalization.datasets.utils.federated_dataset import (
+    FederatedDataset,
+)
+from fedml_api.standalone.domain_generalization.datasets.transforms.denormalization import (
+    DeNormalize,
+)
+from fedml_api.standalone.domain_generalization.backbone.ResNet import (
+    resnet10,
+    resnet12,
+    resnet18,
+)
+from fedml_api.standalone.domain_generalization.backbone.efficientnet import (
+    EfficientNetB0,
+)
+from fedml_api.standalone.domain_generalization.backbone.mobilnet_v2 import MobileNetV2
+
+
+class AudioDataset(data.Dataset):
+    def __init__(
+        self,
+        root,
+        train=True,
+        transform=None,
+        target_transform=None,
+        data_name=None,
+    ) -> None:
+        self.not_aug_transform = transforms.Compose([transforms.ToTensor()])
+        self.data_name = data_name
+        self.root = root
+        self.train = train
+        self.transform = transform
+        self.target_transform = target_transform
+
+        # Build dataset
+        self.samples, self.targets = self.__build_dataset__()
+
+        # Default audio processing parameters
+        self.sample_rate = 16000  # Common sample rate for audio processing
+        self.n_mels = 64  # Number of mel bands
+        self.n_fft = 1024  # FFT window size
+        self.hop_length = 512  # Hop length for STFT
+
+        # Define the mel spectrogram transform
+        self.mel_spectrogram = audio_transforms.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+        )
+
+        # Define log-mel spectrogram transform for better feature representation
+        self.amplitude_to_db = audio_transforms.AmplitudeToDB()
+
+    def __build_dataset__(self):
+        """
+        Load audio files and emotion labels from the dataset directory
+        Returns: list of (audio_path, emotion_label) pairs
+        """
+        samples = []
+        targets = []
+
+        if self.data_name == "crema-d":
+            # Implementation for CREMA-D dataset
+            dataset_path = f"{self.root}/CREMA-D/"
+            split_folder = "train" if self.train else "test"
+            dataset_path = f"{dataset_path}/{split_folder}"
+
+            # CREMA-D has 6 emotion categories
+            # Unified mapping: Neutral (0), Angry (1), Fear (2), Happy (3), Disgust (4), Sad (5)
+            emotion_map = {"NEU": 0, "ANG": 1, "FEA": 2, "HAP": 3, "DIS": 4, "SAD": 5}
+
+            import os
+
+            for filename in os.listdir(dataset_path):
+                if filename.endswith(".wav"):
+                    # Extract emotion from filename (CREMA-D uses specific naming convention)
+                    # Format: ActorID_Sentence_Emotion.wav
+                    parts = filename.split("_")
+                    if len(parts) >= 3:
+                        emotion_code = parts[2].split(".")[0]
+                        if emotion_code in emotion_map:
+                            samples.append(os.path.join(dataset_path, filename))
+                            targets.append(emotion_map[emotion_code])
+
+        elif self.data_name == "ravdess":
+            # Implementation for RAVDESS dataset
+            dataset_path = f"{self.root}/RAVDESS/"
+            split_folder = "train" if self.train else "test"
+            dataset_path = f"{dataset_path}/{split_folder}"
+
+            # RAVDESS emotion encoding (third position in filename):
+            # 01=neutral, 02=calm -> map to Neutral (0)
+            # 03=happy, 08=surprised -> map to Happy (3)
+            # 04=sad -> map to Sad (5)
+            # 05=angry -> map to Angry (1)
+            # 06=fearful -> map to Fear (2)
+            # 07=disgust -> map to Disgust (4)
+            unified_emotion_map = {
+                "01": 0,  # Neutral
+                "02": 0,  # Calm -> Neutral
+                "03": 3,  # Happy
+                "04": 5,  # Sad
+                "05": 1,  # Angry
+                "06": 2,  # Fear
+                "07": 4,  # Disgust
+                "08": 3,  # Surprised -> Happy
+            }
+
+            import os
+
+            for filename in os.listdir(dataset_path):
+                if filename.endswith(".wav"):
+                    # Extract emotion from filename
+                    # Format: 03-01-01-01-01-01-01.wav
+                    # Position 3 indicates emotion
+                    parts = filename.split("-")
+                    if len(parts) >= 3:
+                        emotion_code = parts[2]
+                        if emotion_code in unified_emotion_map:
+                            samples.append(os.path.join(dataset_path, filename))
+                            targets.append(unified_emotion_map[emotion_code])
+
+        return samples, targets
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
+        """
+        Returns a spectrogram and corresponding label
+        """
+        audio_path = self.samples[index]
+        target = self.targets[index]
+
+        # Load audio file
+        waveform, sample_rate = torchaudio.load(audio_path)
+
+        # Convert to mono if stereo
+        if waveform.shape[0] > 1:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
+
+        # Resample if necessary
+        if sample_rate != self.sample_rate:
+            resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
+            waveform = resampler(waveform)
+
+        # Generate mel spectrogram
+        mel_spectrogram = self.mel_spectrogram(waveform)
+
+        # Convert to decibels
+        log_mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
+
+        # Convert to 3-channel image format for compatibility with image-based backbones
+        # Stack the same spectrogram 3 times to create RGB-like channels
+        spectrogram_image = log_mel_spectrogram.repeat(3, 1, 1)
+
+        # Apply additional transforms if provided
+        if self.transform is not None:
+            # Convert to PIL Image for compatibility with image transforms
+            spec_min = spectrogram_image.min()
+            spec_max = spectrogram_image.max()
+            spectrogram_image = (
+                (spectrogram_image - spec_min) / (spec_max - spec_min) * 255.0
+            )
+            spectrogram_image = spectrogram_image.byte().numpy()
+            spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
+            spectrogram_image = self.transform(spectrogram_image)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return spectrogram_image, target
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+
+class FedLeaSER(FederatedDataset):
+    """
+    Federated Speech Emotion Recognition Dataset with domain generalization
+    """
+
+    NAME = "fl_ser"
+    SETTING = "domain_skew"
+    DOMAINS_LIST = ["crema-d", "ravdess"]
+    percent_dict = {"crema-d": 0.01, "ravdess": 0.01}
+
+    # Number of emotion classes - unified 6 classes
+    # Neutral (0), Angry (1), Fear (2), Happy (3), Disgust (4), Sad (5)
+    N_CLASS = 6
+
+    # Transform for spectrograms
+    Nor_TRANSFORM = transforms.Compose(
+        [
+            transforms.Resize((128, 128)),  # Resize spectrogram
+            transforms.RandomCrop(128, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ]
+    )
+
+    def get_data_loaders(self, selected_domain_list: List[str] = []):
+        """
+        Get data loaders for the selected domains, or all domains if none specified
+        """
+        using_list = (
+            self.DOMAINS_LIST
+            if len(selected_domain_list) == 0
+            else selected_domain_list
+        )
+
+        nor_transform = self.Nor_TRANSFORM
+
+        train_dataset_list: list[AudioDataset] = []
+        test_dataset_list: list[AudioDataset] = []
+
+        test_transform = transforms.Compose(
+            [
+                transforms.Resize((128, 128)),  # Resize spectrogram
+                transforms.ToTensor(),
+                self.get_normalization_transform(),
+            ]
+        )
+
+        # Create datasets for each domain
+        for _, domain in enumerate(using_list):
+            train_dataset = AudioDataset(
+                root=data_path(),
+                train=True,
+                transform=nor_transform,
+                data_name=domain,
+            )
+            train_dataset_list.append(train_dataset)
+
+        for _, domain in enumerate(self.DOMAINS_LIST):
+            test_dataset = AudioDataset(
+                root=data_path(),
+                train=False,
+                transform=test_transform,
+                data_name=domain,
+            )
+            test_dataset_list.append(test_dataset)
+
+        traindls, testdls = self.partition_domain_skew_loaders(
+            train_dataset_list, test_dataset_list
+        )
+
+        return traindls, testdls
+
+    @staticmethod
+    def get_transform():
+        transform = transforms.Compose(
+            [transforms.ToPILImage(), FedLeaSER.Nor_TRANSFORM]
+        )
+        return transform
+
+    @staticmethod
+    def get_backbone(parti_num, names_list):
+        """
+        Get neural network backbones for the participants
+        """
+        nets_dict = {
+            "resnet10": resnet10,
+            "res10": resnet10,
+            "resnet12": resnet12,
+            "res18": resnet18,
+            "resnet18": resnet18,
+            "efficient": EfficientNetB0,
+            "mobilnet": MobileNetV2,
+        }
+        nets_list = []
+        if names_list is None:
+            for j in range(parti_num):
+                nets_list.append(resnet10(FedLeaSER.N_CLASS))
+        else:
+            for j in range(parti_num):
+                # net_name = names_list[j]
+                net_name = names_list
+                nets_list.append(nets_dict[net_name](FedLeaSER.N_CLASS))
+        return nets_list
+
+    @staticmethod
+    def get_normalization_transform():
+        transform = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        return transform
+
+    @staticmethod
+    def get_denormalization_transform():
+        transform = DeNormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        return transform
+
+    def partition_domain_skew_loaders(
+        self,
+        train_datasets: list[AudioDataset],
+        test_datasets: list[AudioDataset],
+    ) -> Tuple[list[DataLoader], list[DataLoader]]:
+        """
+        Partition datasets into train and test loaders with domain skew
+        """
+        ini_len_dict = {}
+        not_used_index_dict = {}
+
+        # Initialize dictionaries with dataset indices
+        for i in range(len(train_datasets)):
+            name = train_datasets[i].data_name
+            if name not in not_used_index_dict:
+                train_dataset = train_datasets[i]
+                y_train = train_dataset.targets
+
+                not_used_index_dict[name] = np.arange(len(y_train))
+                ini_len_dict[name] = len(y_train)
+
+        # Create train loaders
+        for index in range(len(train_datasets)):
+            name = train_datasets[index].data_name
+            train_dataset = train_datasets[index]
+
+            idxs = np.random.permutation(not_used_index_dict[name])
+
+            percent = self.percent_dict[name]
+            selected_idx = idxs[0 : int(percent * ini_len_dict[name])]
+
+            not_used_index_dict[name] = idxs[int(percent * ini_len_dict[name]) :]
+
+            train_sampler = SubsetRandomSampler(selected_idx)
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=self.args.local_batch_size,
+                sampler=train_sampler,
+            )
+            self.train_loaders.append(train_loader)
+
+        # Create test loaders
+        for index in range(len(test_datasets)):
+            name = test_datasets[index].data_name
+            test_dataset = test_datasets[index]
+
+            test_loader = DataLoader(
+                test_dataset, batch_size=self.args.local_batch_size, shuffle=False
+            )
+            self.test_loader.append(test_loader)
+
+        return self.train_loaders, self.test_loader
