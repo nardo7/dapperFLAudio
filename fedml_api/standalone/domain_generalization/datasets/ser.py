@@ -23,6 +23,9 @@ from fedml_api.standalone.domain_generalization.backbone.ResNet import (
 from fedml_api.standalone.domain_generalization.backbone.efficientnet import (
     EfficientNetB0,
 )
+from fedml_api.standalone.domain_generalization.backbone.conv_model import (
+    audio_conv_rnn,
+)
 from fedml_api.standalone.domain_generalization.backbone.mobilnet_v2 import MobileNetV2
 
 
@@ -131,6 +134,34 @@ class AudioDataset(data.Dataset):
                             samples.append(os.path.join(dataset_path, filename))
                             targets.append(unified_emotion_map[emotion_code])
 
+        elif self.data_name == "emo-db":
+            # Implementation for EMO-DB dataset
+            dataset_path = f"{self.root}/EMO-DB/"
+            split_folder = "train" if self.train else "test"
+            dataset_path = f"{dataset_path}/{split_folder}"
+
+            # EMO-DB emotion mapping
+            unified_emotion_map = {
+                "N": 0,  # Neutral
+                "B": 0,  # Calm -> Neutral
+                "F": 3,  # Happy
+                "T": 5,  # Sad
+                "W": 1,  # Angry
+                "A": 2,  # Fear
+                "E": 4,  # Disgust
+            }
+
+            import os
+
+            for filename in os.listdir(dataset_path):
+                if filename.endswith(".wav"):
+                    # Extract emotion from filename
+                    # Format: XXaYYFa.wav where F is the emotion code
+                    emotion_code = filename[5]  # Get the emotion code (6th character)
+                    if emotion_code in unified_emotion_map:
+                        samples.append(os.path.join(dataset_path, filename))
+                        targets.append(unified_emotion_map[emotion_code])
+
         return samples, targets
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
@@ -190,8 +221,8 @@ class FedLeaSER(FederatedDataset):
 
     NAME = "fl_ser"
     SETTING = "domain_skew"
-    DOMAINS_LIST = ["crema-d", "ravdess"]
-    percent_dict = {"crema-d": 0.01, "ravdess": 0.01}
+    DOMAINS_LIST = ["crema-d", "ravdess", "emo-db"]
+    percent_dict = {"crema-d": 0.01, "ravdess": 0.01, "emo-db": 0.01}
 
     # Number of emotion classes - unified 6 classes
     # Neutral (0), Angry (1), Fear (2), Happy (3), Disgust (4), Sad (5)
@@ -276,6 +307,7 @@ class FedLeaSER(FederatedDataset):
             "resnet18": resnet18,
             "efficient": EfficientNetB0,
             "mobilnet": MobileNetV2,
+            "conv_model": audio_conv_rnn,
         }
         nets_list = []
         if names_list is None:
@@ -283,9 +315,17 @@ class FedLeaSER(FederatedDataset):
                 nets_list.append(resnet10(FedLeaSER.N_CLASS))
         else:
             for j in range(parti_num):
-                # net_name = names_list[j]
                 net_name = names_list
-                nets_list.append(nets_dict[net_name](FedLeaSER.N_CLASS))
+                if net_name == "conv_model":
+                    # Initialize audio_conv_rnn with proper parameters
+                    # feature_size=64 (n_mels), dropout=0.2, label_size=N_CLASS
+                    nets_list.append(
+                        audio_conv_rnn(
+                            feature_size=64, dropout=0.2, label_size=FedLeaSER.N_CLASS
+                        )
+                    )
+                else:
+                    nets_list.append(nets_dict[net_name](FedLeaSER.N_CLASS))
         return nets_list
 
     @staticmethod

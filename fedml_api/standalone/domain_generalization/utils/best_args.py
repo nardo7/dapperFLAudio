@@ -51,7 +51,7 @@ best_args = {
         "moon": {"local_lr": 0.01, "local_batch_size": 64, "temperature": 0.5, "mu": 5},
         "fpl": {"local_lr": 0.01, "local_batch_size": 64, "Note": "+ MSE"},
     },
-    "fl_officecaltech": {
+    "fl_ser": {
         "fedavg": {
             "local_lr": 0.01,
             "local_batch_size": 64,
