@@ -262,7 +262,7 @@ class FederatedGCommandsDataset(FederatedDataset):
         # Partition the dataset into train and test loaders
         train_loaders = []
         test_loaders = []
-        num_workers = 4 if torch.cuda.is_available() else None
+        num_workers = 4 if torch.cuda.is_available() else 0
         for train_ds in train_ds_list:
             idxs = np.random.choice(
                 np.arange(len(train_ds)),
