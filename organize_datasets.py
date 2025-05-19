@@ -148,9 +148,9 @@ def main():
     base_path = "data"
 
     # Organize both datasets
-    # organize_crema_d(base_path)
+    organize_crema_d(base_path)
     # organize_ravdess(base_path)
-    organize_emodb(base_path)
+    # organize_emodb(base_path)
 
     print("Dataset organization complete!")
 

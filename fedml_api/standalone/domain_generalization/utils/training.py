@@ -94,7 +94,7 @@ def train(
     domains_len = len(domains_list)
 
     if args.rand_dataset:
-        max_num = 10
+        max_num = args.parti_num
         is_ok = False
 
         while not is_ok:

@@ -4,9 +4,8 @@ import torch.utils.data as data
 import torchaudio
 import torchaudio.transforms as audio_transforms
 import torchvision.transforms as transforms
-from PIL import Image
 from torch.utils.data import DataLoader, SubsetRandomSampler
-from typing import Tuple, Union, List
+from typing import Tuple, List
 
 from fedml_api.standalone.domain_generalization.utils.conf import data_path
 from fedml_api.standalone.domain_generalization.datasets.utils.federated_dataset import (
@@ -17,19 +16,16 @@ from fedml_api.standalone.domain_generalization.datasets.transforms.denormalizat
 )
 from fedml_api.standalone.domain_generalization.backbone.ResNet import (
     resnet10,
-    resnet12,
-    resnet18,
 )
-from fedml_api.standalone.domain_generalization.backbone.efficientnet import (
-    EfficientNetB0,
-)
+from fedml_api.standalone.domain_generalization.backbone.vgg_speech import vgg11
 from fedml_api.standalone.domain_generalization.backbone.conv_model import (
     audio_conv_rnn,
 )
-from fedml_api.standalone.domain_generalization.backbone.mobilnet_v2 import MobileNetV2
 
 
 class AudioDataset(data.Dataset):
+    CORRUPTED_FILES = ["1050_MTI_DIS_XX.wav"]
+
     def __init__(
         self,
         root,
@@ -46,8 +42,7 @@ class AudioDataset(data.Dataset):
         self.target_transform = target_transform
 
         # Build dataset
-        self.samples, self.targets = self.__build_dataset__()
-
+        self.samples, self.targets, self.samples_by_speakers = self.__build_dataset__()
         # Default audio processing parameters
         self.sample_rate = 16000  # Common sample rate for audio processing
         self.n_mels = 64  # Number of mel bands
@@ -70,8 +65,9 @@ class AudioDataset(data.Dataset):
         Load audio files and emotion labels from the dataset directory
         Returns: list of (audio_path, emotion_label) pairs
         """
-        samples = []
-        targets = []
+        samples: list[str] = []
+        targets: list[str] = []
+        samples_by_speaker: dict[str, list[tuple[str, int]]] = {}
 
         if self.data_name == "crema-d":
             # Implementation for CREMA-D dataset
@@ -85,7 +81,7 @@ class AudioDataset(data.Dataset):
 
             import os
 
-            for filename in os.listdir(dataset_path):
+            for idx, filename in enumerate(os.listdir(dataset_path)):
                 if filename.endswith(".wav"):
                     # Extract emotion from filename (CREMA-D uses specific naming convention)
                     # Format: ActorID_Sentence_Emotion.wav
@@ -96,7 +92,30 @@ class AudioDataset(data.Dataset):
                             samples.append(os.path.join(dataset_path, filename))
                             targets.append(emotion_map[emotion_code])
 
+                    # fill speaker's samples
+                    speaker = str(int(parts[0]) - 1000)
+                    samples_by_speaker[speaker] = (
+                        [(filename, idx)]
+                        if speaker not in samples_by_speaker
+                        else samples_by_speaker[speaker] + [(filename, idx)]
+                    )
+            self.num_speakers = len(samples_by_speaker)
+
+            # Remove corrupted files
+            for corrupted_file in self.CORRUPTED_FILES:
+                if corrupted_file in samples:
+                    index = samples.index(corrupted_file)
+                    samples.pop(index)
+                    targets.pop(index)
+                    for speaker in samples_by_speaker:
+                        samples_by_speaker[speaker] = [
+                            sample
+                            for sample in samples_by_speaker[speaker]
+                            if sample[0] != corrupted_file
+                        ]
+
         elif self.data_name == "ravdess":
+            self.num_speakers = 24
             # Implementation for RAVDESS dataset
             dataset_path = f"{self.root}/RAVDESS/"
             split_folder = "train" if self.train else "test"
@@ -135,6 +154,7 @@ class AudioDataset(data.Dataset):
                             targets.append(unified_emotion_map[emotion_code])
 
         elif self.data_name == "emo-db":
+            self.num_speakers = 10
             # Implementation for EMO-DB dataset
             dataset_path = f"{self.root}/EMO-DB/"
             split_folder = "train" if self.train else "test"
@@ -162,7 +182,7 @@ class AudioDataset(data.Dataset):
                         samples.append(os.path.join(dataset_path, filename))
                         targets.append(unified_emotion_map[emotion_code])
 
-        return samples, targets
+        return samples, targets, samples_by_speaker
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
         """
@@ -189,26 +209,22 @@ class AudioDataset(data.Dataset):
         # Convert to decibels
         log_mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
 
-        # Convert to 3-channel image format for compatibility with image-based backbones
-        # Stack the same spectrogram 3 times to create RGB-like channels
-        spectrogram_image = log_mel_spectrogram.repeat(3, 1, 1)
-
         # Apply additional transforms if provided
         if self.transform is not None:
             # Convert to PIL Image for compatibility with image transforms
-            spec_min = spectrogram_image.min()
-            spec_max = spectrogram_image.max()
-            spectrogram_image = (
-                (spectrogram_image - spec_min) / (spec_max - spec_min) * 255.0
-            )
-            spectrogram_image = spectrogram_image.byte().numpy()
-            spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
-            spectrogram_image = self.transform(spectrogram_image)
+            # spec_min = log_mel_spectrogram.min()
+            # spec_max = log_mel_spectrogram.max()
+            # spectrogram_image = (
+            #     (log_mel_spectrogram - spec_min) / (spec_max - spec_min) * 255.0
+            # )
+            # spectrogram_image = spectrogram_image.byte().numpy()
+            # spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
+            log_mel_spectrogram = self.transform(log_mel_spectrogram)
 
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return spectrogram_image, target
+        return log_mel_spectrogram, target
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -221,8 +237,8 @@ class FedLeaSER(FederatedDataset):
 
     NAME = "fl_ser"
     SETTING = "domain_skew"
-    DOMAINS_LIST = ["crema-d", "ravdess", "emo-db"]
-    percent_dict = {"crema-d": 0.01, "ravdess": 0.01, "emo-db": 0.01}
+    DOMAINS_LIST = ["crema-d"]  # , "ravdess", "emo-db"]
+    percent_dict = {"crema-d": 0.1}  # , "ravdess": 0.3, "emo-db": 0.8}
 
     # Number of emotion classes - unified 6 classes
     # Neutral (0), Angry (1), Fear (2), Happy (3), Disgust (4), Sad (5)
@@ -231,11 +247,11 @@ class FedLeaSER(FederatedDataset):
     # Transform for spectrograms
     Nor_TRANSFORM = transforms.Compose(
         [
-            transforms.Resize((128, 128)),  # Resize spectrogram
-            transforms.RandomCrop(128, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.Resize((64, 64)),  # Resize spectrogram
+            # transforms.RandomCrop(128, padding=4),
+            # transforms.RandomHorizontalFlip(),
+            # transforms.ToTensor(),
+            transforms.Normalize((0.5), (0.225)),
         ]
     )
 
@@ -256,8 +272,8 @@ class FedLeaSER(FederatedDataset):
 
         test_transform = transforms.Compose(
             [
-                transforms.Resize((128, 128)),  # Resize spectrogram
-                transforms.ToTensor(),
+                transforms.Resize((64, 64)),  # Resize spectrogram
+                # transforms.ToTensor(),
                 self.get_normalization_transform(),
             ]
         )
@@ -295,27 +311,23 @@ class FedLeaSER(FederatedDataset):
         return transform
 
     @staticmethod
-    def get_backbone(parti_num, names_list):
+    def get_backbone(parti_num, net_name: str | None):
         """
         Get neural network backbones for the participants
         """
         nets_dict = {
             "resnet10": resnet10,
             "res10": resnet10,
-            "resnet12": resnet12,
-            "res18": resnet18,
-            "resnet18": resnet18,
-            "efficient": EfficientNetB0,
-            "mobilnet": MobileNetV2,
+            "VGG11": vgg11,
+            "vgg11": vgg11,
             "conv_model": audio_conv_rnn,
         }
         nets_list = []
-        if names_list is None:
+        if net_name is None:
             for j in range(parti_num):
-                nets_list.append(resnet10(FedLeaSER.N_CLASS))
+                nets_list.append(resnet10(FedLeaSER.N_CLASS, input_channels=1))
         else:
             for j in range(parti_num):
-                net_name = names_list
                 if net_name == "conv_model":
                     # Initialize audio_conv_rnn with proper parameters
                     # feature_size=64 (n_mels), dropout=0.2, label_size=N_CLASS
@@ -325,17 +337,19 @@ class FedLeaSER(FederatedDataset):
                         )
                     )
                 else:
-                    nets_list.append(nets_dict[net_name](FedLeaSER.N_CLASS))
+                    nets_list.append(
+                        nets_dict[net_name](FedLeaSER.N_CLASS, input_channels=1)
+                    )
         return nets_list
 
     @staticmethod
     def get_normalization_transform():
-        transform = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        transform = transforms.Normalize((0.5), (0.225))
         return transform
 
     @staticmethod
     def get_denormalization_transform():
-        transform = DeNormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        transform = DeNormalize((0.485), (0.225))
         return transform
 
     def partition_domain_skew_loaders(
@@ -346,30 +360,45 @@ class FedLeaSER(FederatedDataset):
         """
         Partition datasets into train and test loaders with domain skew
         """
-        ini_len_dict = {}
-        not_used_index_dict = {}
+        # ini_len_dict = {}
+        # not_used_index_dict = {}
+        distinct_by_domain: list[AudioDataset] = []
+        for domain in self.DOMAINS_LIST:
+            # find a dataset with the same domain
+            for dataset in train_datasets:
+                if dataset.data_name == domain:
+                    distinct_by_domain.append(dataset)
+                    break
 
         # Initialize dictionaries with dataset indices
-        for i in range(len(train_datasets)):
-            name = train_datasets[i].data_name
-            if name not in not_used_index_dict:
-                train_dataset = train_datasets[i]
-                y_train = train_dataset.targets
-
-                not_used_index_dict[name] = np.arange(len(y_train))
-                ini_len_dict[name] = len(y_train)
-
-        # Create train loaders
         for index in range(len(train_datasets)):
-            name = train_datasets[index].data_name
+            speaker_idx = np.random.choice(train_datasets[index].num_speakers, 1)[0]
+            speaker_id = list(train_datasets[index].samples_by_speakers.keys())[
+                speaker_idx
+            ]
+
+            #     name = train_datasets[i].data_name
+            #     if name not in not_used_index_dict:
+            #         train_dataset = train_datasets[i]
+            #         y_train = train_dataset.targets
+
+            #         not_used_index_dict[name] = np.arange(len(y_train))
+            #         ini_len_dict[name] = len(y_train)
+
+            # # Create train loaders
+            # for index in range(len(train_datasets)):
+            # name = train_datasets[index].data_name
             train_dataset = train_datasets[index]
 
-            idxs = np.random.permutation(not_used_index_dict[name])
+            idxs = [
+                sample[1]
+                for sample in train_dataset.samples_by_speakers[str(speaker_id)]
+            ]
 
-            percent = self.percent_dict[name]
-            selected_idx = idxs[0 : int(percent * ini_len_dict[name])]
+            # percent = self.percent_dict[name]
+            selected_idx = np.array(idxs)  # idxs[0 : int(percent * ini_len_dict[name])]
 
-            not_used_index_dict[name] = idxs[int(percent * ini_len_dict[name]) :]
+            # not_used_index_dict[name] = idxs[int(percent * ini_len_dict[name]) :]
 
             train_sampler = SubsetRandomSampler(selected_idx)
             train_loader = DataLoader(
@@ -381,7 +410,6 @@ class FedLeaSER(FederatedDataset):
 
         # Create test loaders
         for index in range(len(test_datasets)):
-            name = test_datasets[index].data_name
             test_dataset = test_datasets[index]
 
             test_loader = DataLoader(

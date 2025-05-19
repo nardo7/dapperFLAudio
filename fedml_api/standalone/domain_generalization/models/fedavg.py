@@ -27,6 +27,7 @@ class FedAvG(FederatedModel):
             total_clients, self.online_num, replace=False
         ).tolist()
         self.online_clients = online_clients
+        print("chosen clients: ", online_clients)
 
         for i in online_clients:
             self._train_net(i, self.nets_list[i], priloader_list[i])
