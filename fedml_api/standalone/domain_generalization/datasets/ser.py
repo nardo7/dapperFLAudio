@@ -103,16 +103,32 @@ class AudioDataset(data.Dataset):
 
             # Remove corrupted files
             for corrupted_file in self.CORRUPTED_FILES:
-                if corrupted_file in samples:
-                    index = samples.index(corrupted_file)
-                    samples.pop(index)
-                    targets.pop(index)
-                    for speaker in samples_by_speaker:
-                        samples_by_speaker[speaker] = [
-                            sample
-                            for sample in samples_by_speaker[speaker]
-                            if sample[0] != corrupted_file
-                        ]
+                print(f"Removing corrupted file: {corrupted_file}")
+                for speaker in samples_by_speaker:
+                    # speaker_samples_has_corrupted_file = [
+                    #     sample[0]
+                    #     for sample in samples_by_speaker[speaker]
+                    #     if sample[0] == corrupted_file
+                    # ]
+                    # if len(speaker_samples_has_corrupted_file) > 0:
+                    #     print(
+                    #         f"1. Speaker {speaker} has corrupted file: {corrupted_file}"
+                    #     )
+
+                    samples_by_speaker[speaker] = [
+                        sample
+                        for sample in samples_by_speaker[speaker]
+                        if sample[0] != corrupted_file
+                    ]
+                    # speaker_samples_has_corrupted_file = [
+                    #     sample[0]
+                    #     for sample in samples_by_speaker[speaker]
+                    #     if sample[0] == corrupted_file
+                    # ]
+                    # if len(speaker_samples_has_corrupted_file) > 0:
+                    #     print(
+                    #         f"2. Speaker {speaker} has corrupted file: {corrupted_file}"
+                    #     )
 
         elif self.data_name == "ravdess":
             self.num_speakers = 24
