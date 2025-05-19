@@ -103,7 +103,7 @@ class AudioDataset(data.Dataset):
 
             # Remove corrupted files
             for corrupted_file in self.CORRUPTED_FILES:
-                print(f"Removing corrupted file: {corrupted_file}")
+                # print(f"Removing corrupted file: {corrupted_file}")
                 for speaker in samples_by_speaker:
                     # speaker_samples_has_corrupted_file = [
                     #     sample[0]
@@ -378,20 +378,34 @@ class FedLeaSER(FederatedDataset):
         """
         # ini_len_dict = {}
         # not_used_index_dict = {}
-        distinct_by_domain: list[AudioDataset] = []
+        grouped_by_domain: dict[str, list[AudioDataset]] = {}
+        num_workers = 4 if torch.cuda.is_available() else 0
+
         for domain in self.DOMAINS_LIST:
             # find a dataset with the same domain
-            for dataset in train_datasets:
-                if dataset.data_name == domain:
-                    distinct_by_domain.append(dataset)
-                    break
+            grouped_by_domain[domain] = [
+                ds for ds in train_datasets if ds.data_name == domain
+            ]
+
+        # count clients per domain
+        speaker_ids_per_domain = {}
+
+        for domain in grouped_by_domain:
+            speaker_ids_per_domain[domain] = np.random.choice(
+                grouped_by_domain[domain][0].num_speakers,
+                len(grouped_by_domain[domain]),
+                replace=False,
+            )
+
+        print("Speaker IDs per domain: ", speaker_ids_per_domain)
 
         # Initialize dictionaries with dataset indices
         for index in range(len(train_datasets)):
-            speaker_idx = np.random.choice(train_datasets[index].num_speakers, 1)[0]
+            speaker_idx = speaker_ids_per_domain[domain][index]
             speaker_id = list(train_datasets[index].samples_by_speakers.keys())[
                 speaker_idx
             ]
+            print(f"Speaker ID chosen for client {index}: {speaker_id}")
 
             #     name = train_datasets[i].data_name
             #     if name not in not_used_index_dict:
@@ -421,6 +435,7 @@ class FedLeaSER(FederatedDataset):
                 train_dataset,
                 batch_size=self.args.local_batch_size,
                 sampler=train_sampler,
+                num_workers=num_workers,
             )
             self.train_loaders.append(train_loader)
 

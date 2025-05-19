@@ -54,7 +54,7 @@ best_args = {
     "fl_ser": {
         "fedavg": {
             "local_lr": 0.01,
-            "local_batch_size": 64,
+            "local_batch_size": 32,
         },
         "dapperfl": {
             "local_lr": 0.01,
