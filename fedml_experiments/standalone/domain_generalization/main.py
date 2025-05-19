@@ -120,7 +120,7 @@ def parse_args():
         help="The Option for Learning Rate Decay",
     )
     parser.add_argument(
-        "--averaing",
+        "--averaging",
         type=str,
         default="weight",
         help="The Option for averaging strategy",

@@ -87,58 +87,85 @@ class FederatedModel(nn.Module):
             prev_net.load_state_dict(net_para)
 
     def aggregate_nets(self, freq=None):
-        global_net = self.global_net
-        nets_list = self.nets_list
+        """
+        Aggregates the networks of all clients
+        """
+        if self.args.dataset == "fl_ser":
+            # Use the new aggregation method for audio dataset
+            if freq is None:
+                freq = self.args.communication_epoch
 
-        online_clients = self.online_clients
-        global_w = self.global_net.state_dict()
-        # global_w_prev = copy.deepcopy(global_w)
+            if self.args.averaging == "weight":
+                # Weight averaging
+                online_clients = self.online_clients
+                online_clients_dl = [self.trainloaders[i] for i in online_clients]
+                online_clients_len = [
+                    len(dl.sampler.indices) for dl in online_clients_dl
+                ]
+                total_len = sum(online_clients_len)
+                weights = [len / total_len for len in online_clients_len]
 
-        if self.args.averaing == "weight":
-            online_clients_dl = [
-                self.trainloaders[online_clients_index]
-                for online_clients_index in online_clients
-            ]
-            online_clients_len = [dl.sampler.indices.size for dl in online_clients_dl]
-            online_clients_all = np.sum(online_clients_len)
-            freq = online_clients_len / online_clients_all
+                for param in self.global_net.parameters():
+                    param.data = torch.zeros_like(param.data)
+
+                for i, client_idx in enumerate(online_clients):
+                    for param, client_param in zip(
+                        self.global_net.parameters(),
+                        self.nets_list[client_idx].parameters(),
+                    ):
+                        param.data += client_param.data * weights[i]
+
+            elif self.args.averaging == "simple":
+                # Simple averaging
+                for param in self.global_net.parameters():
+                    param.data = torch.zeros_like(param.data)
+
+                for client_idx in self.online_clients:
+                    for param, client_param in zip(
+                        self.global_net.parameters(),
+                        self.nets_list[client_idx].parameters(),
+                    ):
+                        param.data += client_param.data / len(self.online_clients)
         else:
-            # if freq == None:
-            parti_num = len(online_clients)
-            freq = [1 / parti_num for _ in range(parti_num)]
+            # Use the old aggregation method for digits dataset
+            global_net = self.global_net
+            nets_list = self.nets_list
 
-        first = True
-        for index, net_id in enumerate(online_clients):
-            net = nets_list[net_id]
+            online_clients = self.online_clients
+            global_w = self.global_net.state_dict()
 
-            # # recovery weights
-            # if self.args.model == "dapperfl" and self.pr_strategy != "0":
-            #     for name, module in net.named_modules():
-            #         if isinstance(
-            #             module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
-            #         ) and torch_prune.is_pruned(module):
-            #             mask = list(module.named_buffers())[0][1]
-            #             module.weight += global_w_prev[name + ".weight"] - (
-            #                 global_w_prev[name + ".weight"] * mask
-            #             )
-            #             # remove pruning
-            #             torch_prune.remove(module, "weight")
-
-            net_para = net.state_dict()
-
-            if first:
-                first = False
-                for key in net_para:
-                    if "mask" in key:
-                        continue
-                    global_w[key] = net_para[key] * freq[index]
+            if self.args.averaging == "weight":
+                online_clients_dl = [
+                    self.trainloaders[online_clients_index]
+                    for online_clients_index in online_clients
+                ]
+                online_clients_len = [
+                    dl.sampler.indices.size for dl in online_clients_dl
+                ]
+                online_clients_all = np.sum(online_clients_len)
+                freq = online_clients_len / online_clients_all
             else:
-                for key in net_para:
-                    if "mask" in key:
-                        continue
-                    global_w[key] += net_para[key] * freq[index]
+                parti_num = len(online_clients)
+                freq = [1 / parti_num for _ in range(parti_num)]
 
-        global_net.load_state_dict(global_w)
+            first = True
+            for index, net_id in enumerate(online_clients):
+                net = nets_list[net_id]
+                net_para = net.state_dict()
 
-        for i, net in enumerate(nets_list):
-            net.load_state_dict(global_w)
+                if first:
+                    first = False
+                    for key in net_para:
+                        if "mask" in key:
+                            continue
+                        global_w[key] = net_para[key] * freq[index]
+                else:
+                    for key in net_para:
+                        if "mask" in key:
+                            continue
+                        global_w[key] += net_para[key] * freq[index]
+
+            global_net.load_state_dict(global_w)
+
+            for i, net in enumerate(nets_list):
+                net.load_state_dict(global_w)

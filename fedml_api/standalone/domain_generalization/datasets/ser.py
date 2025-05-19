@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import torch
 import torch.utils.data as data
 import torchaudio
@@ -37,6 +38,7 @@ class AudioDataset(data.Dataset):
         transform=None,
         target_transform=None,
         data_name=None,
+        fixed_length=100,  # Add fixed length parameter
     ) -> None:
         self.not_aug_transform = transforms.Compose([transforms.ToTensor()])
         self.data_name = data_name
@@ -44,6 +46,7 @@ class AudioDataset(data.Dataset):
         self.train = train
         self.transform = transform
         self.target_transform = target_transform
+        self.fixed_length = fixed_length  # Store fixed length
 
         # Build dataset
         self.samples, self.targets = self.__build_dataset__()
@@ -83,8 +86,6 @@ class AudioDataset(data.Dataset):
             # Unified mapping: Neutral (0), Angry (1), Fear (2), Happy (3), Disgust (4), Sad (5)
             emotion_map = {"NEU": 0, "ANG": 1, "FEA": 2, "HAP": 3, "DIS": 4, "SAD": 5}
 
-            import os
-
             for filename in os.listdir(dataset_path):
                 if filename.endswith(".wav"):
                     # Extract emotion from filename (CREMA-D uses specific naming convention)
@@ -120,8 +121,6 @@ class AudioDataset(data.Dataset):
                 "08": 3,  # Surprised -> Happy
             }
 
-            import os
-
             for filename in os.listdir(dataset_path):
                 if filename.endswith(".wav"):
                     # Extract emotion from filename
@@ -150,8 +149,6 @@ class AudioDataset(data.Dataset):
                 "A": 2,  # Fear
                 "E": 4,  # Disgust
             }
-
-            import os
 
             for filename in os.listdir(dataset_path):
                 if filename.endswith(".wav"):
@@ -189,26 +186,39 @@ class AudioDataset(data.Dataset):
         # Convert to decibels
         log_mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
 
-        # Convert to 3-channel image format for compatibility with image-based backbones
-        # Stack the same spectrogram 3 times to create RGB-like channels
-        spectrogram_image = log_mel_spectrogram.repeat(3, 1, 1)
+        # Normalize the spectrogram
+        spec_min = log_mel_spectrogram.min()
+        spec_max = log_mel_spectrogram.max()
+        normalized_spectrogram = (log_mel_spectrogram - spec_min) / (
+            spec_max - spec_min
+        )
 
-        # Apply additional transforms if provided
+        # Pad or truncate to fixed length
+        current_length = normalized_spectrogram.shape[2]
+        if current_length < self.fixed_length:
+            # Pad with zeros
+            padding = torch.zeros(1, self.n_mels, self.fixed_length - current_length)
+            normalized_spectrogram = torch.cat([normalized_spectrogram, padding], dim=2)
+        elif current_length > self.fixed_length:
+            # Truncate
+            normalized_spectrogram = normalized_spectrogram[:, :, : self.fixed_length]
+
         if self.transform is not None:
             # Convert to PIL Image for compatibility with image transforms
-            spec_min = spectrogram_image.min()
-            spec_max = spectrogram_image.max()
-            spectrogram_image = (
-                (spectrogram_image - spec_min) / (spec_max - spec_min) * 255.0
-            )
-            spectrogram_image = spectrogram_image.byte().numpy()
-            spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
-            spectrogram_image = self.transform(spectrogram_image)
-
+            # spec_min = spectrogram_image.min()
+            # spec_max = spectrogram_image.max()
+            # spectrogram_image = (
+            #     (spectrogram_image - spec_min) / (spec_max - spec_min) * 255.0
+            # )
+            # spectrogram_image = spectrogram_image.byte().numpy()
+            # spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
+            # spectrogram_image = self.transform(spectrogram_image)
+            normalized_spectrogram = self.transform(normalized_spectrogram)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return spectrogram_image, target
+        # return spectrogram_image, target
+        return normalized_spectrogram, target
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -231,11 +241,9 @@ class FedLeaSER(FederatedDataset):
     # Transform for spectrograms
     Nor_TRANSFORM = transforms.Compose(
         [
-            transforms.Resize((128, 128)),  # Resize spectrogram
-            transforms.RandomCrop(128, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            # transforms.Resize((64, 64)),  # Resize spectrogram
+            # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.Normalize((0.485,), (0.229,))  # Single channel normalization
         ]
     )
 
@@ -254,13 +262,14 @@ class FedLeaSER(FederatedDataset):
         train_dataset_list: list[AudioDataset] = []
         test_dataset_list: list[AudioDataset] = []
 
-        test_transform = transforms.Compose(
-            [
-                transforms.Resize((128, 128)),  # Resize spectrogram
-                transforms.ToTensor(),
-                self.get_normalization_transform(),
-            ]
-        )
+        # test_transform = transforms.Compose(
+        #     [
+        #         transforms.Resize((64, 64)),  # Resize spectrogram
+        #         transforms.ToTensor(),
+        #         self.get_normalization_transform(),
+        #     ]
+        # )
+        test_transform = transforms.Compose([self.get_normalization_transform()])
 
         # Create datasets for each domain
         for _, domain in enumerate(using_list):
@@ -287,12 +296,12 @@ class FedLeaSER(FederatedDataset):
 
         return traindls, testdls
 
-    @staticmethod
-    def get_transform():
-        transform = transforms.Compose(
-            [transforms.ToPILImage(), FedLeaSER.Nor_TRANSFORM]
-        )
-        return transform
+    # @staticmethod
+    # def get_transform():
+    #     transform = transforms.Compose(
+    #         [transforms.ToPILImage(), FedLeaSER.Nor_TRANSFORM]
+    #     )
+    #     return transform
 
     @staticmethod
     def get_backbone(parti_num, names_list):
@@ -316,6 +325,7 @@ class FedLeaSER(FederatedDataset):
         else:
             for j in range(parti_num):
                 net_name = names_list
+
                 if net_name == "conv_model":
                     # Initialize audio_conv_rnn with proper parameters
                     # feature_size=64 (n_mels), dropout=0.2, label_size=N_CLASS
@@ -330,12 +340,16 @@ class FedLeaSER(FederatedDataset):
 
     @staticmethod
     def get_normalization_transform():
-        transform = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        # transform = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        transform = transforms.Normalize(
+            (0.485,), (0.229,)
+        )  # Single channel normalization
         return transform
 
     @staticmethod
     def get_denormalization_transform():
-        transform = DeNormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        # transform = DeNormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        transform = DeNormalize((0.485,), (0.229,))  # Single channel denormalization
         return transform
 
     def partition_domain_skew_loaders(
@@ -344,48 +358,50 @@ class FedLeaSER(FederatedDataset):
         test_datasets: list[AudioDataset],
     ) -> Tuple[list[DataLoader], list[DataLoader]]:
         """
-        Partition datasets into train and test loaders with domain skew
+        Partition datasets into train and test loaders by speaker ID
+        Each client gets data from one speaker
         """
-        ini_len_dict = {}
-        not_used_index_dict = {}
+        # Dictionary to store speaker indices for each dataset
+        speaker_indices = {}
 
-        # Initialize dictionaries with dataset indices
-        for i in range(len(train_datasets)):
-            name = train_datasets[i].data_name
-            if name not in not_used_index_dict:
-                train_dataset = train_datasets[i]
-                y_train = train_dataset.targets
+        # Group indices by speaker for each dataset
+        for dataset in train_datasets:
+            name = dataset.data_name
+            if name not in speaker_indices:
+                speaker_indices[name] = {}
 
-                not_used_index_dict[name] = np.arange(len(y_train))
-                ini_len_dict[name] = len(y_train)
+            for idx, sample_path in enumerate(dataset.samples):
+                # Extract speaker ID based on dataset
+                if name == "crema-d":
+                    # Format: ActorID_Sentence_Emotion.wav
+                    speaker_id = sample_path.split("/")[-1].split("_")[0]
+                elif name == "ravdess":
+                    # Format: 03-01-01-01-01-01-01.wav
+                    speaker_id = sample_path.split("/")[-1].split("-")[0]
+                elif name == "emo-db":
+                    # Format: XXaYYFa.wav
+                    speaker_id = sample_path.split("/")[-1][:2]
 
-        # Create train loaders
-        for index in range(len(train_datasets)):
-            name = train_datasets[index].data_name
-            train_dataset = train_datasets[index]
+                if speaker_id not in speaker_indices[name]:
+                    speaker_indices[name][speaker_id] = []
+                speaker_indices[name][speaker_id].append(idx)
 
-            idxs = np.random.permutation(not_used_index_dict[name])
-
-            percent = self.percent_dict[name]
-            selected_idx = idxs[0 : int(percent * ini_len_dict[name])]
-
-            not_used_index_dict[name] = idxs[int(percent * ini_len_dict[name]) :]
-
-            train_sampler = SubsetRandomSampler(selected_idx)
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=self.args.local_batch_size,
-                sampler=train_sampler,
-            )
-            self.train_loaders.append(train_loader)
+        # Create train loaders - one loader per speaker
+        for dataset in train_datasets:
+            name = dataset.data_name
+            for speaker_id, indices in speaker_indices[name].items():
+                train_sampler = SubsetRandomSampler(indices)
+                train_loader = DataLoader(
+                    dataset,
+                    batch_size=self.args.local_batch_size,
+                    sampler=train_sampler,
+                )
+                self.train_loaders.append(train_loader)
 
         # Create test loaders
-        for index in range(len(test_datasets)):
-            name = test_datasets[index].data_name
-            test_dataset = test_datasets[index]
-
+        for dataset in test_datasets:
             test_loader = DataLoader(
-                test_dataset, batch_size=self.args.local_batch_size, shuffle=False
+                dataset, batch_size=self.args.local_batch_size, shuffle=False
             )
             self.test_loader.append(test_loader)
 
