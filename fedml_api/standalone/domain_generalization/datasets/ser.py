@@ -7,6 +7,10 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, SubsetRandomSampler
 from typing import Tuple, List
 
+from fedml_api.standalone.domain_generalization.datasets.utils.public_dataset import (
+    SimpleSpecAugment,
+    time_shift_waveform,
+)
 from fedml_api.standalone.domain_generalization.utils.conf import data_path
 from fedml_api.standalone.domain_generalization.datasets.utils.federated_dataset import (
     FederatedDataset,
@@ -16,6 +20,7 @@ from fedml_api.standalone.domain_generalization.datasets.transforms.denormalizat
 )
 from fedml_api.standalone.domain_generalization.backbone.ResNet import (
     resnet10,
+    resnet18,
 )
 from fedml_api.standalone.domain_generalization.backbone.vgg_speech import vgg11
 from fedml_api.standalone.domain_generalization.backbone.conv_model import (
@@ -56,6 +61,8 @@ class AudioDataset(data.Dataset):
             hop_length=self.hop_length,
             n_mels=self.n_mels,
         )
+
+        self.spec_augment = SimpleSpecAugment()
 
         # Define log-mel spectrogram transform for better feature representation
         self.amplitude_to_db = audio_transforms.AmplitudeToDB()
@@ -209,7 +216,7 @@ class AudioDataset(data.Dataset):
 
         # Load audio file
         waveform, sample_rate = torchaudio.load(audio_path)
-
+        waveform = time_shift_waveform(waveform)
         # Convert to mono if stereo
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
@@ -224,6 +231,8 @@ class AudioDataset(data.Dataset):
 
         # Convert to decibels
         log_mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
+
+        log_mel_spectrogram = self.spec_augment(log_mel_spectrogram)
 
         # Apply additional transforms if provided
         if self.transform is not None:
@@ -263,7 +272,7 @@ class FedLeaSER(FederatedDataset):
     # Transform for spectrograms
     Nor_TRANSFORM = transforms.Compose(
         [
-            transforms.Resize((64, 64)),  # Resize spectrogram
+            transforms.Resize((128, 128)),  # Resize spectrogram
             # transforms.RandomCrop(128, padding=4),
             # transforms.RandomHorizontalFlip(),
             # transforms.ToTensor(),
@@ -288,7 +297,7 @@ class FedLeaSER(FederatedDataset):
 
         test_transform = transforms.Compose(
             [
-                transforms.Resize((64, 64)),  # Resize spectrogram
+                transforms.Resize((128, 128)),  # Resize spectrogram
                 # transforms.ToTensor(),
                 self.get_normalization_transform(),
             ]
@@ -334,6 +343,8 @@ class FedLeaSER(FederatedDataset):
         nets_dict = {
             "resnet10": resnet10,
             "res10": resnet10,
+            "res18": resnet18,
+            "resnet18": resnet18,
             "VGG11": vgg11,
             "vgg11": vgg11,
             "conv_model": audio_conv_rnn,
