@@ -165,3 +165,14 @@ def time_shift_waveform(waveform: torch.Tensor, shift_limit: float = 0.2):
         )
     )
     return torch.roll(waveform, shifts=shift_amt, dims=1)
+
+
+class RandomApplyTransform:
+    def __init__(self, transform, p):
+        self.transform = transform
+        self.p = p
+
+    def __call__(self, x):
+        if np.random.random() < self.p:
+            return self.transform(x)
+        return x

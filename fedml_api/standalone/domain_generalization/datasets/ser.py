@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from typing import Tuple, List
 
 from fedml_api.standalone.domain_generalization.datasets.utils.public_dataset import (
+    RandomApplyTransform,
     SimpleSpecAugment,
     time_shift_waveform,
 )
@@ -62,7 +63,8 @@ class AudioDataset(data.Dataset):
             n_mels=self.n_mels,
         )
 
-        self.spec_augment = SimpleSpecAugment()
+        self.spec_augment = RandomApplyTransform(SimpleSpecAugment(), 0.4)
+        self.time_shift = RandomApplyTransform(time_shift_waveform, 0.5)
 
         # Define log-mel spectrogram transform for better feature representation
         self.amplitude_to_db = audio_transforms.AmplitudeToDB()
@@ -218,7 +220,7 @@ class AudioDataset(data.Dataset):
         waveform, sample_rate = torchaudio.load(audio_path)
 
         if self.train:
-            waveform = time_shift_waveform(waveform)
+            waveform = self.time_shift(waveform)
 
         # Convert to mono if stereo
         if waveform.shape[0] > 1:
