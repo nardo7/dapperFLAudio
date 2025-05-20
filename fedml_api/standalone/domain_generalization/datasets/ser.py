@@ -216,7 +216,10 @@ class AudioDataset(data.Dataset):
 
         # Load audio file
         waveform, sample_rate = torchaudio.load(audio_path)
-        waveform = time_shift_waveform(waveform)
+
+        if self.train:
+            waveform = time_shift_waveform(waveform)
+
         # Convert to mono if stereo
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
@@ -232,7 +235,8 @@ class AudioDataset(data.Dataset):
         # Convert to decibels
         log_mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
 
-        log_mel_spectrogram = self.spec_augment(log_mel_spectrogram)
+        if self.train:
+            log_mel_spectrogram = self.spec_augment(log_mel_spectrogram)
 
         # Apply additional transforms if provided
         if self.transform is not None:

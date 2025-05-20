@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from typing import Tuple
 from torchvision import datasets
 import numpy as np
-import torch.optim
+import torchaudio.transforms as T
+import torch
 
 
 class PublicDataset:
@@ -110,3 +111,57 @@ def pad_sequence(audio: torch.Tensor, max_len: int) -> torch.Tensor:
         audio = torch.cat((audio, padding), dim=1)
         # print(audio.shape)
     return audio
+
+
+class SimpleSpecAugment(torch.nn.Module):
+    def __init__(
+        self, freq_mask_param=15, time_mask_param=35, n_freq_masks=2, n_time_masks=2
+    ):
+        super().__init__()
+        self.freq_mask_param = freq_mask_param
+        self.time_mask_param = time_mask_param
+        self.n_freq_masks = n_freq_masks
+        self.n_time_masks = n_time_masks
+
+    def forward(self, spec: torch.Tensor):
+        """
+        Args:
+            spec (Tensor): Log-mel spectrogram of shape (channel, freq, time)
+        Returns:
+            Tensor: Augmented spectrogram
+        """
+        augmented_spec = spec.clone()
+
+        # Apply frequency masking
+        for _ in range(self.n_freq_masks):
+            augmented_spec = T.FrequencyMasking(freq_mask_param=self.freq_mask_param)(
+                augmented_spec
+            )
+
+        # Apply time masking
+        for _ in range(self.n_time_masks):
+            augmented_spec = T.TimeMasking(time_mask_param=self.time_mask_param)(
+                augmented_spec
+            )
+
+        return augmented_spec
+
+
+def time_shift_waveform(waveform: torch.Tensor, shift_limit: float = 0.2):
+    """
+    Randomly shift waveform left or right by a fraction of total length.
+
+    Args:
+        waveform (Tensor): Shape (channels, time)
+        shift_limit (float): Max proportion of total time to shift
+
+    Returns:
+        Tensor: Time-shifted waveform
+    """
+    num_samples = waveform.shape[1]
+    shift_amt = int(
+        torch.randint(
+            -int(shift_limit * num_samples), int(shift_limit * num_samples), (1,)
+        )
+    )
+    return torch.roll(waveform, shifts=shift_amt, dims=1)
