@@ -61,6 +61,7 @@ class AudioDataset(data.Dataset):
             n_fft=self.n_fft,
             hop_length=self.hop_length,
             n_mels=self.n_mels,
+            win_length=self.n_fft,
         )
 
         self.spec_augment = RandomApplyTransform(SimpleSpecAugment(), 0.4)
@@ -218,7 +219,9 @@ class AudioDataset(data.Dataset):
 
         # Load audio file
         waveform, sample_rate = torchaudio.load(audio_path)
-
+        waveform = audio_transforms.Resample(
+            orig_freq=sample_rate, new_freq=self.sample_rate
+        )(waveform)
         if self.train:
             waveform = self.time_shift(waveform)
 
