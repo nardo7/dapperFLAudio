@@ -1,4 +1,5 @@
 from typing import cast
+import torch
 from torch.nn.modules import Module
 import torch.optim as optim
 import torch.nn as nn
@@ -82,11 +83,26 @@ class DapperFL(FederatedModel):
 
         super().aggregate_nets(freq)
 
-    def _train_net(self, index, net, train_loader):
-        # net = net.cpu()
-        # stat(net, (3, 32, 32))
-        # print(list(net.named_buffers()))
+    def _run_epoch(self, net, train_loader, criterion, optimizer):
+        for batch_idx, (images, labels) in enumerate(train_loader):
+            images = images.to(self.device)
+            labels = labels.to(self.device)
+            features = net.features(images)
+            outputs = net.classifier(features)
 
+            if self.reg_coeff != 0.0:
+                loss = criterion(outputs, labels)
+                reg = features.norm(dim=1).mean()
+                loss = loss + reg * self.reg_coeff
+            else:
+                loss = criterion(outputs, labels)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        return loss
+
+    def _train_net(self, index, net, train_loader):
         net = net.to(self.device)
         net.train()
         optimizer = optim.SGD(
@@ -96,23 +112,8 @@ class DapperFL(FederatedModel):
         criterion.to(self.device)
         iterator = tqdm(range(self.local_epoch))
         for i in iterator:
-            for batch_idx, (images, labels) in enumerate(train_loader):
-                images = images.to(self.device)
-                labels = labels.to(self.device)
-                features = net.features(images)
-                outputs = net.classifier(features)
-
-                if self.reg_coeff != 0.0:
-                    loss = criterion(outputs, labels)
-                    reg = features.norm(dim=1).mean()
-                    loss = loss + reg * self.reg_coeff
-                else:
-                    loss = criterion(outputs, labels)
-
-                optimizer.zero_grad()
-                loss.backward()
-                iterator.desc = "Local Pariticipant %d loss = %0.3f" % (index, loss)
-                optimizer.step()
+            loss = self._run_epoch(net, train_loader, criterion, optimizer)
+            iterator.desc = "Local Pariticipant %d loss = %0.3f" % (index, loss)
 
             if i == 0:
                 # print("labels: ", labels)
@@ -137,11 +138,58 @@ class DapperFL(FederatedModel):
                                 )
                     # pruning
                     if "res" in self.nets_list[index].name:
-                        self.nets_list[index] = self._res_pruning(
-                            index, self.nets_list[index]
-                        )
+                        if self.args.pr_strategy == "iterative":
+                            self.nets_list[index] = self._res_pruning_v2(
+                                index,
+                                self.nets_list[index],
+                                train_loader,
+                                criterion,
+                                optimizer,
+                            )
+                        else:
+                            self.nets_list[index] = self._prepare_run_pruning(
+                                index, self.nets_list[index]
+                            )
 
-    def _res_pruning(self, index, net, mod_struc=False):
+    def _model_sparsity(model):
+        total_zeros = 0
+        total_elements = 0
+        for _, module in model.named_modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                if hasattr(module, "weight"):
+                    weight = module.weight.data
+                    total_zeros += torch.sum(weight == 0).item()
+                    total_elements += weight.numel()
+        sparsity = 100.0 * total_zeros / total_elements if total_elements > 0 else 0.0
+        print(
+            f"Model sparsity: {sparsity:.2f}% ({total_zeros}/{total_elements} weights are zero)"
+        )
+        return sparsity / 100.0
+
+    def _res_pruning_v2(
+        self,
+        index: int,
+        net: nn.Module,
+        train_loader,
+        criterion,
+        optimizer,
+        goal_sparsity=0.2,
+    ):
+        print(f"Pruning local model {index} iteratively")
+        model_sparsity = self._model_sparsity(net)
+        print(f"Model sparsity: {model_sparsity}")
+        while model_sparsity < goal_sparsity:
+            net = self._res_pruning(index, net, 0.2)
+            model_sparsity = self._model_sparsity(net)
+            print(f"Model pruned. Sparsity: {model_sparsity}")
+            if model_sparsity >= goal_sparsity:
+                break
+            print(f"Fine-tuning local model {index} after pruning")
+            self._run_epoch(net, train_loader, criterion, optimizer)
+
+        return net
+
+    def _prepare_run_pruning(self, index, net):
         if self.pr_strategy == "AD":
             pr_strategy = self.pr_ratios[
                 index % len(self.pr_ratios)
@@ -153,23 +201,18 @@ class DapperFL(FederatedModel):
         else:
             pr_prob = self.prune_prob[self.pr_strategy]  # get pruning ratios for layers
 
-        if mod_struc:
-            pr_prob = [
-                0,
-                0,
-                0,
-                0,
-            ]  # Do not prune the global model, just modify its structure for Pytorch processing.
-        else:
-            print("Prune local model %s, pr_ratio = %s" % (index, pr_prob))
+        print("Prune local model %s, pr_ratio = %s" % (index, pr_prob))
+        net = self._res_pruning(net, pr_prob)
+        return net
 
+    def _res_pruning(self, net, pr_prob=None):
         conv_count = 0
         down_count = 0  # r10's stage1 has no 'downsample' layer
         for name, module in net.named_modules():
-            if isinstance(
-                module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
-            ) and torch_prune.is_pruned(module):
-                torch_prune.remove(module, "weight")
+            # if isinstance(
+            #     module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
+            # ) and torch_prune.is_pruned(module):
+            #     torch_prune.remove(module, "weight")
             if isinstance(module, nn.Conv2d):
                 if conv_count == 0:  # The first conv layer in resnet.
                     conv_count += 1
