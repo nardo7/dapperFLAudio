@@ -42,7 +42,7 @@ class DapperFL(FederatedModel):
 
     def ini(self):
         self.global_net = copy.deepcopy(self.nets_list[0])
-        global_w = self.nets_list[0].state_dict()
+        global_w = self.global_net.state_dict()
         # stat(self.global_net.cpu(), (3, 28, 28))
         for _, net in enumerate(self.nets_list):
             net.load_state_dict(global_w)
@@ -62,25 +62,53 @@ class DapperFL(FederatedModel):
 
         return None
 
+    def weight_sparsity(self, weights):
+        """
+        Compute the sparsity (percentage of zero elements) in a weights tensor or numpy array.
+        """
+        if isinstance(weights, torch.Tensor):
+            num_zeros = torch.sum(weights == 0).item()
+            num_elements = weights.numel()
+        else:
+            import numpy as np
+
+            num_zeros = np.sum(weights == 0)
+            num_elements = weights.size
+        sparsity = 100.0 * num_zeros / num_elements if num_elements > 0 else 0.0
+        return sparsity
+
     def aggregate_nets(self, freq=None):
         global_w = self.global_net.state_dict()
         global_w_prev = copy.deepcopy(global_w)
+        # global_sparsity = self._model_sparsity(self.global_net)
+        # if global_sparsity > 0.01:
+        #     print(f"WAARNING: Global model has {global_sparsity:.2f}% sparsity.")
+
         for index, net_id in enumerate(self.online_clients):
             net = self.nets_list[net_id]
-            net = cast(Module, net)
-
+            net.eval()
             # recovery weights
             for name, module in net.named_modules():
                 if isinstance(
                     module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
                 ) and torch_prune.is_pruned(module):
-                    mask = list(module.named_buffers())[0][1]
+                    # mask = list(module.named_buffers())[0][1]
+                    # # mask = (mask > 0.5).to(dtype=module.weight.dtype).to(self.device)
+
+                    # with torch.no_grad():
+                    mask = module.weight_mask
                     module.weight += global_w_prev[name + ".weight"] - (
                         global_w_prev[name + ".weight"] * mask
                     )
-                    # remove pruning
+                    # # this removes reparametrization (mask, original weights before pruning, and apply the mask into the actual weights)
+                    # # so it does not remove the pruning or reset the model to its orignal state
                     torch_prune.remove(module, "weight")
 
+                    # current_weight = module.weight.data
+                    # orig_weight = global_w_prev[f"{name}.weight"]
+                    # # Where mask==0 (pruned), set to original; else keep current
+                    # new_weight = current_weight * mask + orig_weight * (1 - mask)
+                    # module.weight.data.copy_(new_weight)
         super().aggregate_nets(freq)
 
     def _run_epoch(self, net, train_loader, criterion, optimizer):
@@ -104,6 +132,8 @@ class DapperFL(FederatedModel):
 
     def _train_net(self, index, net, train_loader):
         net = net.to(self.device)
+        equals = self.models_equal(net, self.global_net)
+        print(f"Local Participant {index} model is equal to global model: {equals}")
         net.train()
         optimizer = optim.SGD(
             net.parameters(), lr=self.local_lr, momentum=0.9, weight_decay=1e-5
@@ -124,18 +154,18 @@ class DapperFL(FederatedModel):
                         alpha_k = (1 - self.epsilon) ** self.epoch_index * self.alpha_0
                         if alpha_k < self.alpha_min:
                             alpha_k = self.alpha_min
-                            # self.alpha_0 = 0
+                        print("fusing co-pruning with alpha_k = %.3f" % alpha_k)
+                        # self.alpha_0 = 0
                         for [(name0, m0), (name1, m1)] in zip(
                             self.global_net.named_modules(),
                             self.nets_list[index].named_modules(),
                         ):
-                            if isinstance(
-                                m1, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
-                            ) and torch_prune.is_pruned(m1):
-                                m1.weight.data = (
-                                    alpha_k * m0.weight.data.clone()
-                                    + (1 - alpha_k) * m1.weight.data.clone()
-                                )
+                            if isinstance(m1, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)):
+                                with torch.no_grad():
+                                    m1.weight.data = (
+                                        alpha_k * m0.weight.data.clone()
+                                        + (1 - alpha_k) * m1.weight.data.clone()
+                                    )
                     # pruning
                     if "res" in self.nets_list[index].name:
                         if self.args.pr_strategy == "iterative":
@@ -145,21 +175,29 @@ class DapperFL(FederatedModel):
                                 train_loader,
                                 criterion,
                                 optimizer,
+                                goal_sparsity=float(
+                                    self.pr_ratios[index % len(self.pr_ratios)]
+                                ),
                             )
                         else:
                             self.nets_list[index] = self._prepare_run_pruning(
                                 index, self.nets_list[index]
                             )
 
-    def _model_sparsity(model):
+    def _model_sparsity(self, model):
         total_zeros = 0
         total_elements = 0
         for _, module in model.named_modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+            if (
+                isinstance(module, nn.Conv2d)
+                or isinstance(module, nn.Linear)
+                or isinstance(module, nn.BatchNorm2d)
+            ):
                 if hasattr(module, "weight"):
-                    weight = module.weight.data
-                    total_zeros += torch.sum(weight == 0).item()
-                    total_elements += weight.numel()
+                    with torch.no_grad():
+                        weight = module.weight.data
+                        total_zeros += torch.sum(weight == 0).item()
+                        total_elements += weight.numel()
         sparsity = 100.0 * total_zeros / total_elements if total_elements > 0 else 0.0
         print(
             f"Model sparsity: {sparsity:.2f}% ({total_zeros}/{total_elements} weights are zero)"
@@ -175,11 +213,10 @@ class DapperFL(FederatedModel):
         optimizer,
         goal_sparsity=0.2,
     ):
-        print(f"Pruning local model {index} iteratively")
+        print(f"Pruning local model {index} iteratively towards {goal_sparsity * 100}%")
         model_sparsity = self._model_sparsity(net)
-        print(f"Model sparsity: {model_sparsity}")
-        while model_sparsity < goal_sparsity:
-            net = self._res_pruning(index, net, 0.2)
+        while model_sparsity < goal_sparsity - 0.05:
+            net = self._res_pruning(net, self.prune_prob["0.2"])
             model_sparsity = self._model_sparsity(net)
             print(f"Model pruned. Sparsity: {model_sparsity}")
             if model_sparsity >= goal_sparsity:
