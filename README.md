@@ -1,19 +1,10 @@
 [//]: # (>📋  A template README.md for code accompanying a Machine Learning paper)
 
-# DapperFL: Domain Adaptive Federated Learning with Model Fusion Pruning for Edge Devices
-
-<p align="center">
-  <a href="https://github.com/FedML-AI/FedML/projects/1"><img alt="Roadmap" src="https://img.shields.io/badge/roadmap-FedML-informational.svg?style=flat-square"></a>
-  <a href="#"><img alt="Python3" src="https://img.shields.io/badge/Python-3-brightgreen.svg?style=flat-square"></a>
-  <a href="#"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-%3E1.9-orange"></a>
-</p>
-
-This repository is the official implementation of [**DapperFL: Domain Adaptive Federated Learning
-with Model Fusion Pruning for Edge Devices**]. (Accepted by **NeurIPS 2024**)
+# Domain Adaptive Federated Learning for Speech Emotion Recognition
 
 
 [//]: # (>📋  Optional: include a graphic explaining your approach/main result, bibtex entry, link to demos, blog posts and tutorials)
-<img src="./docs/DapperFL_overview.jpg" width = "80%" height = "" alt="DapperFL" TITLE="Overview of DapperFL." />
+[//]: <img src="./docs/DapperFL_overview.jpg" width = "80%" height = "" alt="DapperFL" TITLE="Overview of DapperFL." />
 
 
 ## Requirements
