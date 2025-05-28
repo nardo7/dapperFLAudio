@@ -25,6 +25,11 @@ In principle you do not need to download the datasets yourself. The only excepti
 
 [//]: # ">📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc..."
 
+#### SER
+
+1. You need to download CREMA-D from Kaggle, put it into the ./data folder. You just have to make sure that there is the following folder structure in the project root path: `./CREMA-D/AudioWAV`.
+2. Run `python orginize_datasets.py` script. This will partition randomly the dataset into the train and test path, which will be then used by the fl_ser dataset
+
 ## Training & Evaluation
 
 To train the model(s) in the paper, run this command:
@@ -39,21 +44,21 @@ python ./fedml_experiments/standalone/domain_generalization/main.py --model dapp
 
 You can modify the arguments to run DapperFL on other settings. The arguments are described as follows:
 
-| Arguments             | Description                                                                                                       |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- | --- |
-| `prefix`              | A prefix for logging.                                                                                             |
-| `communication_epoch` | Total communication rounds of Federated Learning.                                                                 |
-| `local_epoch`         | Local epochs for local model updating.                                                                            |
-| `parti_num`           | Number of participants.                                                                                           |
-| `model`               | Name of FL framework.                                                                                             |
-| `dataset`             | Datasets used in the experiment. Options: `fl_officecaltech`, `fl_digits`.                                        |
-| `pr_strategy`         | Pruning ratio used to prune local models. Options: `0` (without pruning), `0.1` ~ `0.9`, `AD` (adaptive pruning). |
-| `backbone`            | Backbone global model. Options: `resnet10`, `resnet18`.                                                           |
-| `alpha`               | Coefficient alpha in co-pruning. Default: `0.9`.                                                                  |
-| `alpha_min`           | Coefficient alpha_min in co-pruning. Default: `0.1`.                                                              |
-| `epsilon`             | Coefficient epsilon in co-pruning. Default: `0.2`.                                                                |
-| `reg_coeff`           | Coefficient for L2 regularization. Default: `0.01`.                                                               |     |
-| `seed`                | Random seed.                                                                                                      |
+| Arguments             | Description                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| `prefix`              | A prefix for logging.                                                                                                                              |
+| `communication_epoch` | Total communication rounds of Federated Learning.                                                                                                  |
+| `local_epoch`         | Local epochs for local model updating.                                                                                                             |
+| `parti_num`           | Number of participants.                                                                                                                            |
+| `model`               | Name of FL framework.                                                                                                                              |
+| `dataset`             | Datasets used in the experiment. Options: `fl_officecaltech`, `fl_digits`, `fl_ser`.                                                               |
+| `pr_strategy`         | Pruning ratio used to prune local models. Options: `0` (without pruning), `0.1` ~ `0.9`, `AD` (adaptive pruning), `iterative` (iterative pruning). |
+| `backbone`            | Backbone global model. Options: `resnet10`, `resnet18`.                                                                                            |
+| `alpha`               | Coefficient alpha in co-pruning. Default: `0.9`.                                                                                                   |
+| `alpha_min`           | Coefficient alpha_min in co-pruning. Default: `0.1`.                                                                                               |
+| `epsilon`             | Coefficient epsilon in co-pruning. Default: `0.2`.                                                                                                 |
+| `reg_coeff`           | Coefficient for L2 regularization. Default: `0.01`.                                                                                                |     |
+| `seed`                | Random seed.                                                                                                                                       |
 
 [//]: # ">📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below)."
 [//]: # "## Pre-trained Models"
