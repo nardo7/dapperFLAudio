@@ -1,4 +1,15 @@
 best_args = {
+    "gcommands": {
+        "fedavg": {
+            "local_lr": 0.01,
+            "local_batch_size": 32,
+        },
+        "dapperfl": {
+            "local_lr": 0.01,
+            "local_batch_size": 64,
+            "pr_ratios": ["0", "0.2", "0.4", "0.6", "0.8"],
+        },
+    },
     "fl_digits": {
         "fedavg": {
             "local_lr": 0.01,
@@ -40,14 +51,14 @@ best_args = {
         "moon": {"local_lr": 0.01, "local_batch_size": 64, "temperature": 0.5, "mu": 5},
         "fpl": {"local_lr": 0.01, "local_batch_size": 64, "Note": "+ MSE"},
     },
-    "fl_officecaltech": {
+    "fl_ser": {
         "fedavg": {
             "local_lr": 0.01,
-            "local_batch_size": 64,
+            "local_batch_size": 32,
         },
         "dapperfl": {
             "local_lr": 0.01,
-            "local_batch_size": 64,
+            "local_batch_size": 32,
             "pr_ratios": ["0", "0.2", "0.4", "0.6", "0.8"],
         },
         "fedsr": {

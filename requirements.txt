@@ -1,25 +1,9 @@
 torch
 torchvision
 torchaudio
-FedML==0.8.3
-
-
-# h5py==3.6.0
-# matplotlib==3.5.1
-# mpi4py==3.0.3
-# numpy==1.21.2
-# pandas==1.3.5
-# Pillow==9.5.0
-# scikit_learn==1.0.2
-# scipy==1.7.1
+sox
+soundfile
+numpy
 thop
-# torch==1.9.1.post3
 torchstat
-# torchvision==0.10.0a0
-# tqdm==4.63.0
-# wandb==0.13.6
-
-# setproctitle
-# wandb
-# tqdm
-# scikit_learn
+wandb>=0.17.2

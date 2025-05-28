@@ -94,7 +94,7 @@ def train(
     domains_len = len(domains_list)
 
     if args.rand_dataset:
-        max_num = 10
+        max_num = args.parti_num
         is_ok = False
 
         while not is_ok:
@@ -108,6 +108,14 @@ def train(
                 selected_domain_list = list(selected_domain_list) + domains_list
             elif model.args.dataset == "fl_digits":
                 # selected_domain_list = np.random.choice(domains_list, size=args.parti_num, replace=True, p=None)
+                selected_domain_list = np.random.choice(
+                    domains_list,
+                    size=args.parti_num - domains_len,
+                    replace=True,
+                    p=None,
+                )
+                selected_domain_list = list(selected_domain_list) + domains_list
+            elif model.args.dataset == "fl_ser":
                 selected_domain_list = np.random.choice(
                     domains_list,
                     size=args.parti_num - domains_len,

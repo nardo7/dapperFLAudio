@@ -5,17 +5,14 @@ channels:
 dependencies:
   - python=3.11.11
   - pip
-  #- cudatoolkit=11.8
   - cuda-cudart
   - cuda-version=12
   - mpi4py
   - scikit-learn
-  - numpy
   - h5py
   - setproctitle
   - networkx
   - tqdm
   - pip:
       - pyflakes
-      - wandb
       - -r requirements.txt
