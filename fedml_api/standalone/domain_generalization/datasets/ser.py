@@ -113,32 +113,12 @@ class AudioDataset(data.Dataset):
 
             # Remove corrupted files
             for corrupted_file in self.CORRUPTED_FILES:
-                # print(f"Removing corrupted file: {corrupted_file}")
                 for speaker in samples_by_speaker:
-                    # speaker_samples_has_corrupted_file = [
-                    #     sample[0]
-                    #     for sample in samples_by_speaker[speaker]
-                    #     if sample[0] == corrupted_file
-                    # ]
-                    # if len(speaker_samples_has_corrupted_file) > 0:
-                    #     print(
-                    #         f"1. Speaker {speaker} has corrupted file: {corrupted_file}"
-                    #     )
-
                     samples_by_speaker[speaker] = [
                         sample
                         for sample in samples_by_speaker[speaker]
                         if sample[0] != corrupted_file
                     ]
-                    # speaker_samples_has_corrupted_file = [
-                    #     sample[0]
-                    #     for sample in samples_by_speaker[speaker]
-                    #     if sample[0] == corrupted_file
-                    # ]
-                    # if len(speaker_samples_has_corrupted_file) > 0:
-                    #     print(
-                    #         f"2. Speaker {speaker} has corrupted file: {corrupted_file}"
-                    #     )
 
         elif self.data_name == "ravdess":
             self.num_speakers = 24
@@ -245,14 +225,6 @@ class AudioDataset(data.Dataset):
 
         # Apply additional transforms if provided
         if self.transform is not None:
-            # Convert to PIL Image for compatibility with image transforms
-            # spec_min = log_mel_spectrogram.min()
-            # spec_max = log_mel_spectrogram.max()
-            # spectrogram_image = (
-            #     (log_mel_spectrogram - spec_min) / (spec_max - spec_min) * 255.0
-            # )
-            # spectrogram_image = spectrogram_image.byte().numpy()
-            # spectrogram_image = Image.fromarray(spectrogram_image.transpose(1, 2, 0))
             log_mel_spectrogram = self.transform(log_mel_spectrogram)
 
         if self.target_transform is not None:
@@ -282,9 +254,6 @@ class FedLeaSER(FederatedDataset):
     Nor_TRANSFORM = transforms.Compose(
         [
             transforms.Resize((128, 128)),  # Resize spectrogram
-            # transforms.RandomCrop(128, padding=4),
-            # transforms.RandomHorizontalFlip(),
-            # transforms.ToTensor(),
             transforms.Normalize((0.5), (0.225)),
         ]
     )
@@ -307,7 +276,6 @@ class FedLeaSER(FederatedDataset):
         test_transform = transforms.Compose(
             [
                 transforms.Resize((128, 128)),  # Resize spectrogram
-                # transforms.ToTensor(),
                 self.get_normalization_transform(),
             ]
         )
@@ -426,18 +394,6 @@ class FedLeaSER(FederatedDataset):
                 speaker_idx
             ]
             print(f"Speaker ID chosen for client {index}: {speaker_id}")
-
-            #     name = train_datasets[i].data_name
-            #     if name not in not_used_index_dict:
-            #         train_dataset = train_datasets[i]
-            #         y_train = train_dataset.targets
-
-            #         not_used_index_dict[name] = np.arange(len(y_train))
-            #         ini_len_dict[name] = len(y_train)
-
-            # # Create train loaders
-            # for index in range(len(train_datasets)):
-            # name = train_datasets[index].data_name
             train_dataset = train_datasets[index]
 
             idxs = [
@@ -445,10 +401,7 @@ class FedLeaSER(FederatedDataset):
                 for sample in train_dataset.samples_by_speakers[str(speaker_id)]
             ]
 
-            # percent = self.percent_dict[name]
-            selected_idx = np.array(idxs)  # idxs[0 : int(percent * ini_len_dict[name])]
-
-            # not_used_index_dict[name] = idxs[int(percent * ini_len_dict[name]) :]
+            selected_idx = np.array(idxs)
 
             train_sampler = SubsetRandomSampler(selected_idx)
             train_loader = DataLoader(

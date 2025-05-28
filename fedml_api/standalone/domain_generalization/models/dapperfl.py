@@ -1,13 +1,9 @@
-from typing import cast
 import torch
-from torch.nn.modules import Module
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.utils.prune as torch_prune
 from tqdm import tqdm
 import copy
-from thop import profile
-from torchstat import stat
 from fedml_api.standalone.domain_generalization.utils.args import *
 from fedml_api.standalone.domain_generalization.models.utils.federated_model import (
     FederatedModel,
@@ -80,9 +76,6 @@ class DapperFL(FederatedModel):
     def aggregate_nets(self, freq=None):
         global_w = self.global_net.state_dict()
         global_w_prev = copy.deepcopy(global_w)
-        # global_sparsity = self._model_sparsity(self.global_net)
-        # if global_sparsity > 0.01:
-        #     print(f"WAARNING: Global model has {global_sparsity:.2f}% sparsity.")
 
         for index, net_id in enumerate(self.online_clients):
             net = self.nets_list[net_id]
@@ -92,6 +85,7 @@ class DapperFL(FederatedModel):
                 if isinstance(
                     module, (nn.Conv2d, nn.BatchNorm2d, nn.Linear)
                 ) and torch_prune.is_pruned(module):
+                    # this does not just get the mask but also other tensors so it adds noise
                     # mask = list(module.named_buffers())[0][1]
                     # # mask = (mask > 0.5).to(dtype=module.weight.dtype).to(self.device)
 
@@ -100,7 +94,7 @@ class DapperFL(FederatedModel):
                     module.weight += global_w_prev[name + ".weight"] - (
                         global_w_prev[name + ".weight"] * mask
                     )
-                    # # this removes reparametrization (mask, original weights before pruning, and apply the mask into the actual weights)
+                    # # NOTE!!!: this removes reparametrization (mask, original weights before pruning, and apply the mask into the actual weights)
                     # # so it does not remove the pruning or reset the model to its orignal state
                     torch_prune.remove(module, "weight")
 
@@ -274,6 +268,7 @@ class DapperFL(FederatedModel):
                             n=1,
                             dim=1,
                         )
+                        # this might prune the layers double, so it might produce over-pruning
                         torch_prune.ln_structured(
                             module,
                             name="weight",
