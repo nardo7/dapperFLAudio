@@ -35,7 +35,7 @@ In principle you do not need to download the datasets yourself. The only excepti
 To train the model(s) in the paper, run this command:
 
 ```train
-python ./fedml_experiments/standalone/domain_generalization/main.py --model dapperfl --dataset fl_officecaltech --backbone resnet18
+python ./fedml_experiments/standalone/domain_generalization/main.py --model dapperfl --dataset fl_ser --backbone resnet10 --parti_num 72 --online_ratio 0.1 --pr_strategy iterative
 ```
 
 [//]: # ">📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters."
