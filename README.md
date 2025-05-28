@@ -43,42 +43,41 @@ python ./fedml_experiments/standalone/domain_generalization/main.py --model dapp
 ## Arguments
 
 You can modify the arguments to run DapperFL on other settings. The arguments are described as follows:
+| Arguments | Description |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| prefix | A prefix for logging. |
+| communication_epoch | Total communication rounds of Federated Learning. |
+| local_epoch | Local epochs for local model updating. |
+| parti_num | Number of participants. |
+| model | Name of FL framework. |
+| dataset | Datasets used in the experiment. Options: fl_officecaltech, fl_digits, fl_ser. |
+| pr_strategy | Pruning ratio used to prune local models. Options: 0 (without pruning), 0.1 ~ 0.9, AD (adaptive pruning), iterative (iterative pruning). |
+| backbone | Backbone global model. Options: resnet10, resnet18. |
+| alpha | Coefficient alpha in co-pruning. Default: 0.9. |
+| alpha_min | Coefficient alpha_min in co-pruning. Default: 0.1. |
+| epsilon | Coefficient epsilon in co-pruning. Default: 0.2. |
+| reg_coeff | Coefficient for L2 regularization. Default: 0.01. |
+| seed | Random seed.
 
-| Arguments             | Description                                                                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| `prefix`              | A prefix for logging.                                                                                                                              |
-| `communication_epoch` | Total communication rounds of Federated Learning.                                                                                                  |
-| `local_epoch`         | Local epochs for local model updating.                                                                                                             |
-| `parti_num`           | Number of participants.                                                                                                                            |
-| `model`               | Name of FL framework.                                                                                                                              |
-| `dataset`             | Datasets used in the experiment. Options: `fl_officecaltech`, `fl_digits`, `fl_ser`.                                                               |
-| `pr_strategy`         | Pruning ratio used to prune local models. Options: `0` (without pruning), `0.1` ~ `0.9`, `AD` (adaptive pruning), `iterative` (iterative pruning). |
-| `backbone`            | Backbone global model. Options: `resnet10`, `resnet18`.                                                                                            |
-| `alpha`               | Coefficient alpha in co-pruning. Default: `0.9`.                                                                                                   |
-| `alpha_min`           | Coefficient alpha_min in co-pruning. Default: `0.1`.                                                                                               |
-| `epsilon`             | Coefficient epsilon in co-pruning. Default: `0.2`.                                                                                                 |
-| `reg_coeff`           | Coefficient for L2 regularization. Default: `0.01`.                                                                                                |     |
-| `seed`                | Random seed.                                                                                                                                       |
-
-[//]: # ">📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below)."
+[//]: # ">📋 Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below)."
 [//]: # "## Pre-trained Models"
 [//]: #
 [//]: # "You can download pretrained models here:"
 [//]: #
 [//]: # "- [My awesome model](https://drive.google.com/mymodel.pth) trained on ImageNet using parameters x,y,z. "
 [//]: #
-[//]: # ">📋  Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable).  Alternatively you can have an additional column in your results table with a link to the models."
+[//]: # ">📋 Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable). Alternatively you can have an additional column in your results table with a link to the models."
 [//]: # "## Results"
 [//]: #
 [//]: # "Our model achieves the following performance on :"
 [//]: #
 [//]: # "### [Image Classification on ImageNet](https://paperswithcode.com/sota/image-classification-on-imagenet)"
 [//]: #
-[//]: # "| Model name         | Top 1 Accuracy  | Top 5 Accuracy |"
+[//]: # "| Model name | Top 1 Accuracy | Top 5 Accuracy |"
 [//]: # "| ------------------ |---------------- | -------------- |"
-[//]: # "| My awesome model   |     85%         |      95%       |"
+[//]: # "| My awesome model | 85% | 95% |"
 [//]: #
-[//]: # ">📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. "
+[//]: # ">📋 Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. "
 [//]: # "## Contributing"
 [//]: #
-[//]: # ">📋  Pick a licence and describe how to contribute to your code repository. "
+[//]: # ">📋 Pick a licence and describe how to contribute to your code repository. "
